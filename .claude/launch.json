@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gaaat-banner-tool",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-I", "-c", "import http.server, socketserver, functools; Handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory='/Users/akinoritsuguchi/Desktop/gaaat-banner-tool'); socketserver.TCPServer.allow_reuse_address = True; socketserver.TCPServer(('', 8934), Handler).serve_forever()"],
+      "port": 8934,
+      "autoPort": false
+    }
+  ]
+}

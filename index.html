@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>GAAAT バナー自動生成ツール</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Noto+Sans+JP:wght@700;900&family=Playfair+Display:wght@700&family=Shippori+Mincho:wght@700&family=Fredoka:wght@700&family=M+PLUS+Rounded+1c:wght@700&family=Orbitron:wght@700&family=Inter:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --panel-bg:#1c1e22;
+    --panel-bg2:#25282e;
+    --border:#3a3d44;
+    --text:#e8e9ec;
+    --muted:#9a9ea6;
+    --accent:#e2574c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:#111214;
+    color:var(--text);
+    display:flex;
+    min-height:100vh;
+  }
+  #panel{
+    width:420px;
+    min-width:420px;
+    background:var(--panel-bg);
+    padding:24px;
+    overflow-y:auto;
+    height:100vh;
+    border-right:1px solid var(--border);
+  }
+  #stage{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  h1{
+    font-size:16px;
+    margin:0 0 4px;
+    letter-spacing:.02em;
+  }
+  .sub{
+    font-size:12px;
+    color:var(--muted);
+    margin:0 0 20px;
+    line-height:1.5;
+  }
+  fieldset{
+    border:1px solid var(--border);
+    border-radius:8px;
+    margin:0 0 16px;
+    padding:14px;
+  }
+  legend{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--muted);
+    padding:0 6px;
+  }
+  label{
+    display:block;
+    font-size:12px;
+    color:var(--muted);
+    margin:10px 0 4px;
+  }
+  label:first-of-type{margin-top:0;}
+  input[type=text], textarea, input[type=file]{
+    width:100%;
+    background:var(--panel-bg2);
+    border:1px solid var(--border);
+    border-radius:6px;
+    color:var(--text);
+    font-size:13px;
+    padding:8px 10px;
+    font-family:inherit;
+    resize:vertical;
+  }
+  textarea{min-height:64px;line-height:1.5;}
+  .row{display:flex; gap:8px;}
+  .row > div{flex:1;}
+  .swatches{display:flex; gap:10px; margin-top:10px;}
+  .swatch{flex:1; text-align:center;}
+  .swatch .chip{
+    height:36px;
+    border-radius:6px;
+    border:1px solid var(--border);
+    cursor:pointer;
+  }
+  .swatch input[type=color]{
+    width:100%;
+    height:36px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    background:none;
+    padding:0;
+    cursor:pointer;
+  }
+  .swatch span{
+    display:block;
+    font-size:10px;
+    color:var(--muted);
+    margin-top:4px;
+  }
+  button{
+    width:100%;
+    padding:12px;
+    border:none;
+    border-radius:6px;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+    letter-spacing:.02em;
+  }
+  #downloadBtn{
+    background:var(--accent);
+    color:#fff;
+    margin-top:4px;
+  }
+  #resetColorsBtn, #parsePasteBtn, #downloadLayersZipBtn, #downloadPsdBtn{
+    background:var(--panel-bg2);
+    color:var(--text);
+    border:1px solid var(--border);
+    margin-top:10px;
+    font-weight:400;
+    font-size:12px;
+    padding:8px;
+  }
+  select, input[type=date]{
+    width:100%;
+    background:var(--panel-bg2);
+    border:1px solid var(--border);
+    border-radius:6px;
+    color:var(--text);
+    font-size:13px;
+    padding:8px 10px;
+    font-family:inherit;
+    color-scheme:dark;
+  }
+  #pasteArea{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:11px;
+  }
+  .lang-bar{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+  }
+  .lang-chip{
+    background:var(--panel-bg2);
+    color:var(--muted);
+    border:1px solid var(--border);
+    padding:6px 10px;
+    font-size:12px;
+    font-weight:600;
+    border-radius:20px;
+    width:auto;
+    cursor:pointer;
+  }
+  .lang-chip.active{
+    background:var(--accent);
+    color:#fff;
+    border-color:var(--accent);
+  }
+  .lang-chip.add{
+    background:transparent;
+    border-style:dashed;
+  }
+  .lang-chip.needs-translation{
+    border-color:#e0a53a;
+  }
+  .lang-chip.needs-translation::after{
+    content:"！";
+    margin-left:4px;
+    color:#e0a53a;
+    font-weight:800;
+  }
+  .lang-chip.active.needs-translation::after{
+    color:#fff;
+  }
+  #pasteStatus.error, .hint.error{
+    color:#f0a3a3;
+  }
+  #canvasWrap{
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+    position:relative;
+  }
+  canvas{
+    display:block;
+    width:min(78vh,78vw);
+    height:min(78vh,78vw);
+    background:#fff;
+  }
+  #banner.adjust-hoverable{
+    cursor:move;
+  }
+  .adjust-highlight{
+    position:absolute;
+    display:none;
+    pointer-events:none;
+    border:2px dashed #4da3ff;
+    background:rgba(77,163,255,0.12);
+    box-sizing:border-box;
+  }
+  .adjust-highlight.dragging{
+    border-color:#ffd24d;
+    background:rgba(255,210,77,0.15);
+  }
+  .adjust-highlight-label{
+    position:absolute;
+    top:-22px;
+    left:-2px;
+    background:#4da3ff;
+    color:#0b0d10;
+    font-size:11px;
+    font-weight:700;
+    padding:2px 6px;
+    border-radius:3px;
+    white-space:nowrap;
+  }
+  .adjust-highlight.dragging .adjust-highlight-label{
+    background:#ffd24d;
+  }
+  .resize-handle{
+    position:absolute;
+    width:12px;
+    height:12px;
+    background:#4da3ff;
+    border:2px solid #0b0d10;
+    border-radius:2px;
+    box-sizing:border-box;
+    pointer-events:auto;
+  }
+  .adjust-highlight.dragging .resize-handle{
+    background:#ffd24d;
+  }
+  .handle-nw{ top:-7px; left:-7px; cursor:nwse-resize; }
+  .handle-se{ bottom:-7px; right:-7px; cursor:nwse-resize; }
+  .handle-ne{ top:-7px; right:-7px; cursor:nesw-resize; }
+  .handle-sw{ bottom:-7px; left:-7px; cursor:nesw-resize; }
+  .hint{
+    font-size:11px;
+    color:var(--muted);
+    margin-top:6px;
+    line-height:1.5;
+  }
+  .field-label-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    gap:10px;
+  }
+  .field-label-row label{
+    margin:0;
+    flex:1;
+    min-width:0;
+  }
+  .lang-toggle{
+    display:flex;
+    align-items:center;
+    gap:4px;
+    font-size:10px;
+    color:var(--muted);
+    white-space:nowrap;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .lang-toggle input{
+    cursor:pointer;
+    margin:0;
+  }
+  .adjust-grid{
+    display:grid;
+    grid-template-columns: 1fr 56px 56px 56px 44px;
+    gap:6px 8px;
+    align-items:center;
+    font-size:12px;
+  }
+  .adjust-grid .adjust-head{
+    color:var(--muted);
+    font-size:10px;
+    text-align:center;
+  }
+  .adjust-grid label{
+    margin:0;
+    color:var(--text);
+  }
+  .adjust-grid input[type="number"]{
+    width:100%;
+    padding:6px 4px;
+    text-align:center;
+    font-size:12px;
+  }
+  .adjust-grid input[type="checkbox"]{
+    display:block;
+    margin:0 auto;
+    cursor:pointer;
+  }
+  .lang-add-row{
+    display:flex;
+    gap:6px;
+    margin-top:8px;
+  }
+  .lang-add-row select{
+    flex:1;
+  }
+  .lang-add-row button{
+    width:auto;
+    padding:8px 16px;
+    background:var(--panel-bg2);
+    color:var(--text);
+    border:1px solid var(--border);
+    font-size:12px;
+    font-weight:600;
+  }
+  .checkbox-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:12px;
+    color:var(--text);
+    cursor:pointer;
+  }
+  .checkbox-row input{
+    cursor:pointer;
+  }
+  .session-checklist{
+    margin-top:10px;
+    padding:10px;
+    background:var(--panel-bg2);
+    border:1px solid var(--border);
+    border-radius:6px;
+    max-height:160px;
+    overflow-y:auto;
+  }
+  .session-checklist label{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:12px;
+    color:var(--text);
+    margin:0 0 8px;
+    cursor:pointer;
+  }
+  .session-checklist label:last-child{
+    margin-bottom:0;
+  }
+  .session-checklist input{
+    cursor:pointer;
+  }
+  .drive-section{
+    margin-top:14px;
+    padding-top:14px;
+    border-top:1px dashed var(--border);
+  }
+  #driveSignInBtn, #driveLoadFolderBtn{
+    background:var(--panel-bg2);
+    color:var(--text);
+    border:1px solid var(--border);
+    font-size:12px;
+    font-weight:600;
+    padding:9px;
+    width:100%;
+    cursor:pointer;
+  }
+  #driveSignInBtn:disabled, #driveLoadFolderBtn:disabled{
+    opacity:.45;
+    cursor:default;
+  }
+  #driveFolderInput{
+    width:100%;
+    background:var(--panel-bg2);
+    border:1px solid var(--border);
+    border-radius:6px;
+    color:var(--text);
+    font-size:12px;
+    padding:8px 10px;
+    font-family:inherit;
+  }
+  .drive-file-grid{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:8px;
+    margin-top:10px;
+    max-height:280px;
+    overflow-y:auto;
+  }
+  .drive-file-item{
+    position:relative;
+    border:2px solid var(--border);
+    border-radius:6px;
+    overflow:hidden;
+    cursor:pointer;
+    aspect-ratio:1;
+    background:var(--panel-bg2);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:0;
+  }
+  .drive-file-item:hover{
+    border-color:var(--accent);
+  }
+  .drive-file-item.match{
+    border-color:#7ec97e;
+  }
+  .drive-file-item img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    display:block;
+  }
+  .drive-file-item .name{
+    position:absolute;
+    bottom:0; left:0; right:0;
+    background:rgba(0,0,0,.65);
+    color:#fff;
+    font-size:9px;
+    padding:3px 4px;
+    line-height:1.3;
+    max-height:2.6em;
+    overflow:hidden;
+    text-align:left;
+  }
+  .drive-file-item .badge{
+    position:absolute;
+    top:3px; right:3px;
+    background:var(--accent);
+    color:#fff;
+    font-size:8px;
+    font-weight:700;
+    padding:2px 5px;
+    border-radius:10px;
+  }
+  #batchGenerateBtn{
+    background:var(--panel-bg2);
+    color:var(--text);
+    border:1px solid var(--accent);
+    font-weight:600;
+    font-size:13px;
+    padding:10px;
+  }
+  #batchGenerateBtn:disabled{
+    opacity:.5;
+    cursor:default;
+  }
+  #previewBatchBtn{
+    background:var(--panel-bg2);
+    color:var(--text);
+    border:1px solid var(--muted);
+    font-weight:600;
+    font-size:13px;
+    padding:10px;
+  }
+  #previewBatchBtn:disabled{
+    opacity:.5;
+    cursor:default;
+  }
+  #batchPreviewOverlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.7);
+    z-index:1000;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  #batchPreviewOverlay.open{
+    display:flex;
+  }
+  .batch-preview-panel{
+    background:var(--panel-bg);
+    border-radius:12px;
+    width:min(1100px, 100%);
+    max-height:88vh;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+  }
+  .batch-preview-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:16px 20px 0;
+  }
+  .batch-preview-header h3{
+    margin:0;
+    font-size:15px;
+    color:var(--text);
+  }
+  #closeBatchPreviewBtn{
+    background:none;
+    border:none;
+    color:var(--muted);
+    font-size:18px;
+    cursor:pointer;
+    line-height:1;
+    padding:4px 8px;
+  }
+  #closeBatchPreviewBtn:hover{
+    color:var(--text);
+  }
+  .batch-preview-status{
+    padding:4px 20px 0;
+    margin:0;
+  }
+  .batch-preview-body{
+    padding:16px 20px 20px;
+    overflow-y:auto;
+  }
+  .batch-preview-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
+    gap:14px;
+  }
+  .batch-preview-item{
+    cursor:pointer;
+    border:1px solid var(--panel-bg2);
+    border-radius:8px;
+    overflow:hidden;
+    background:var(--panel-bg2);
+    transition:border-color .15s;
+  }
+  .batch-preview-item:hover{
+    border-color:var(--accent);
+  }
+  .batch-preview-item img{
+    width:100%;
+    aspect-ratio:1/1;
+    display:block;
+    background:#fff;
+  }
+  .batch-preview-item .label{
+    padding:6px 8px;
+    font-size:11px;
+    color:var(--text);
+    line-height:1.4;
+  }
+  .batch-preview-item .label .lang{
+    color:var(--muted);
+  }
+  #exportPreviewOverlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.7);
+    z-index:1000;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  #exportPreviewOverlay.open{
+    display:flex;
+  }
+  .export-preview-panel{
+    width:min(1100px, 100%);
+  }
+  #closeExportPreviewBtn{
+    background:none;
+    border:none;
+    color:var(--muted);
+    font-size:18px;
+    cursor:pointer;
+    line-height:1;
+    padding:4px 8px;
+  }
+  #closeExportPreviewBtn:hover{
+    color:var(--text);
+  }
+  .batch-preview-item.selected{
+    border-color:var(--accent);
+    box-shadow:0 0 0 2px var(--accent);
+  }
+  .export-preview-actions{
+    display:flex;
+    gap:8px;
+    padding:0 20px 20px;
+  }
+  #cancelExportBtn{
+    flex:1;
+    background:var(--panel-bg2);
+    color:var(--text);
+    border:1px solid var(--muted);
+    padding:12px;
+    border-radius:8px;
+    cursor:pointer;
+    font-size:13px;
+  }
+  #confirmExportBtn{
+    flex:1;
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    font-weight:700;
+    padding:12px;
+    border-radius:8px;
+    cursor:pointer;
+    font-size:13px;
+  }
+</style>
+</head>
+<body>
+  <div id="panel">
+    <h1>GAAAT バナー自動生成ツール</h1>
+    <p class="sub">1080×1080pxの展示会バナーを自動生成します。キャラクター原画は一切加工せずレイヤーとして配置し、配色は原画から自動抽出します。</p>
+
+    <fieldset>
+      <legend>バナー用途</legend>
+      <select id="bannerPurposeSelect">
+        <option value="venue">来場促進（集客用）</option>
+        <option value="sale">オンライン販売用</option>
+      </select>
+      <p class="hint" id="bannerPurposeHint">会場名・会期情報を軸に来場を促すバナーです。</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>レイアウト</legend>
+      <select id="templateSelect">
+        <option value="current">情報帯型(現行レイアウト)</option>
+        <option value="cutout1">①キャラクター切り抜き型(ポップ・少年漫画系)</option>
+        <option value="vertical2">②縦書きタイトル型(レトロ・和風系)</option>
+        <option value="frame3">③壁掛けフレーム型(汎用・ギャラリー風)</option>
+        <option value="frame4">④スポットライト額装型(ヒーロー・特撮・重厚系)</option>
+        <option value="cyberui5">⑤サイバーUI型(SF・近未来系)</option>
+      </select>
+      <label class="checkbox-row" style="margin-top:10px;">
+        <input type="checkbox" id="autoTemplateCheckbox" checked>
+        <span>原画の配色からレイアウトを自動選択</span>
+      </label>
+      <p class="hint">作品の世界観に合わせてレイアウトを切り替えられます。原画をアップロードすると、配色の傾向（暖色/寒色・彩度・明るさ）から自動的にふさわしいレイアウトを選びます。手動でプルダウンを変更すると自動選択はオフになります。</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>案件マスタから貼り付け</legend>
+
+      <p class="hint" id="sheetsSetupNote"></p>
+      <button type="button" id="sheetsSignInBtn">Googleでログイン</button>
+      <p class="hint" id="sheetsAuthStatus" style="display:none;"></p>
+
+      <label style="margin-top:0;">スプレッドシートのURLから自動取得</label>
+      <input type="text" id="sheetsUrlInput" placeholder="該当タブを開いた状態のスプレッドシートURL（#gid=... 付き）を貼り付け">
+      <button type="button" id="loadSheetsBtn" style="margin-top:8px;">スプレッドシートを読み込む</button>
+      <p class="hint" id="sheetsStatus" style="display:none;"></p>
+      <p class="hint">ここでログインすると、下の「キャラクター原画」欄のGoogleドライブ連携にも同じログインが使えます。URLは該当案件のタブを開いた状態のものを貼ってください。</p>
+
+      <label>または範囲をコピーして貼り付け</label>
+      <textarea id="pasteArea" placeholder="スプレッドシートで範囲を選択してコピー（⌘C）し、ここに貼り付けてください。「案件基本情報」「会期/巡回情報」のブロックをまとめて貼っても、1都市分だけでもOKです。" rows="4"></textarea>
+      <button type="button" id="parsePasteBtn" style="margin-top:8px;">この内容を読み込む</button>
+      <select id="venueSelect" style="margin-top:8px; display:none;"></select>
+      <p class="hint" id="pasteStatus">企画タイトル・コピーライト・会場・会期日程を自動入力します。</p>
+
+      <div id="sessionChecklist" class="session-checklist" style="display:none;"></div>
+
+      <button type="button" id="previewBatchBtn" style="margin-top:12px; display:none;">プレビューを確認</button>
+      <button type="button" id="batchGenerateBtn" style="margin-top:8px; display:none;">選択した都市×言語をまとめて生成してZIPダウンロード</button>
+      <p class="hint" id="batchStatus" style="display:none;"></p>
+      <p class="hint" id="batchHint" style="display:none;">上でチェックした都市と、「言語」欄に追加済みの言語（現在: <span id="batchLangSummary"></span>）の全組み合わせを、選択中のレイアウトのまま一括生成します。テキストは言語ごとに保存済みの内容がそのまま使われます。一括生成の前に「プレビューを確認」で全パターンをサムネイルで見比べておくと、特定の都市・言語だけ文字がはみ出す、といった見落としを事前に防げます。</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>言語</legend>
+      <div id="langBar" class="lang-bar"></div>
+      <div class="lang-add-row">
+        <select id="addLangSelect"></select>
+        <button type="button" id="addLangBtn">追加</button>
+      </div>
+      <p class="hint error" id="translationWarningHint" style="display:none;"></p>
+      <button type="button" id="autoTranslateBtn" style="display:none;">未翻訳・要更新の項目を自動翻訳</button>
+      <p class="hint" id="autoTranslateStatus" style="display:none;"></p>
+      <p class="hint">展示会タイトル・メインコピー・サブコピー・コピーライトは、右上のチェックで言語ごとに切り替えるか（デフォルト）、全言語共通にするかを選べます。切り替えて各言語のテキストを入力してください。会期情報・開催会場名は案件マスタの情報がそのまま使われ、全言語共通です。タブに「！」が付いている言語は、まだ翻訳されていない項目、または原文（日本語）を後から修正したのにその言語の訳文が更新されないまま残っている項目があります。</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>キャラクター原画</legend>
+      <input type="file" id="artFile" accept="image/*">
+      <p class="hint">アップロードした画像はリサイズ・トリミング（配置調整）のみ行い、色調補正・加工は一切行いません。</p>
+
+      <div class="drive-section">
+        <p class="hint" id="driveSetupNote"></p>
+        <button type="button" id="driveSignInBtn">Googleでログイン</button>
+        <div id="driveFolderRow" style="display:none; margin-top:10px;">
+          <input type="text" id="driveFolderInput" placeholder="Googleドライブのフォルダ URL または ID を貼り付け">
+          <button type="button" id="driveLoadFolderBtn" style="margin-top:8px;">フォルダを読み込む</button>
+        </div>
+        <p class="hint" id="driveStatus" style="display:none;"></p>
+        <div id="driveFileGrid" class="drive-file-grid" style="display:none;"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>配色（自動抽出）</legend>
+      <div class="swatches">
+        <div class="swatch">
+          <input type="color" id="bgColorPicker" class="chip">
+          <span>背景色</span>
+        </div>
+        <div class="swatch">
+          <input type="color" id="accentColorPicker" class="chip">
+          <span>アクセント</span>
+        </div>
+        <div class="swatch">
+          <input type="color" id="textColorPicker" class="chip">
+          <span>文字色</span>
+        </div>
+      </div>
+      <p class="hint">原画から「背景＝メインカラー」「アクセント＝次に目立つ色」を自動抽出し、コントラスト比から文字色（白/黒）を自動選択します。手動で上書きも可能です。</p>
+      <button id="resetColorsBtn">原画から再抽出</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>テキスト項目</legend>
+
+      <div class="field-label-row">
+        <label>展示会タイトル（通常は1行でOK。2行目＝英字タグライン／3行目以降＝正式名称は必要な案件だけ追加）</label>
+        <label class="lang-toggle"><input type="checkbox" id="langToggle_title" checked><span>言語別</span></label>
+      </div>
+      <textarea id="titleField">GINTAMA ART EXHIBITION by GAAAT</textarea>
+      <p class="hint">案件マスタの企画タイトルはほとんどが1行の短い文言です（例:「頭文字D ART EXHIBITION by GAAAT」）。1行だけ入力すればOKで、2行目・3行目は「THE MOBILE POLICE」「Mobile Police Patlabor - Art of GEN【RELOAD】」のような、大見出しとは別に英字タグラインや正式名称を添えたい特殊な案件（パトレイバー展など）でだけ使う任意欄です。案件マスタの貼り付け／スプレッドシート取得を行うと、企画タイトル（日本語）で選択中の言語欄の1行目が自動的に上書きされます。「言語別」がオンの場合、他の言語に切り替えると翻訳前のタイトルがコピーされるので、そこから訳文に書き換えてください。ブランド名などで訳さず統一したい場合はチェックを外してください。1行目が長くて自動的に2行に折り返される際、改行位置が意図と違う場合は、改行したい位置に半角の「｜」を入れてください（例:「GAAAT銀魂｜藝術展」→「GAAAT銀魂」「藝術展」の2行）。</p>
+
+      <label for="titleFontSelect">タイトルフォント</label>
+      <select id="titleFontSelect">
+        <option value="gothic">太字ゴシック（デフォルト）</option>
+        <option value="mincho">明朝・上品</option>
+        <option value="rounded">丸ゴシック・ポップ</option>
+        <option value="cyber">サイバー・近未来</option>
+        <option value="clean">シンプル・ゴシック</option>
+      </select>
+      <p class="hint">展示会タイトル（および⑤サイバーUI型のキャッチコピー）に使うフォントです。作品の世界観に合わせて選んでください。全テンプレート・全言語・全案件（一括生成含む）で共通のプロジェクト単位の設定です。</p>
+
+      <label id="dateFieldLabel">会期情報（開始日・終了日）</label>
+      <div class="row">
+        <div>
+          <input type="date" id="dateStart" value="2026-08-21">
+        </div>
+        <div>
+          <input type="date" id="dateEnd" value="2026-08-24">
+        </div>
+      </div>
+      <p class="hint">日付・曜日の表示形式は選択中の言語に合わせて自動で変わります（例: 08.21 (Fri.) / 08.21（金））。案件マスタの会場を選ぶと自動反映されます（全言語共通）。オンライン販売用では任意項目です。</p>
+
+      <label for="dateOverrideField">会期情報の表示テキスト（任意・自由入力）</label>
+      <input type="text" id="dateOverrideField" placeholder="空欄なら上の開始日・終了日から自動生成されます">
+      <p class="hint">通期開催や「随時」など、開始日・終了日だけでは表現できない会期は、ここに直接入力すると上の日付ではなくこちらがそのまま表示されます（バナー上の文字列を丸ごと置き換えます）。</p>
+
+      <label id="venueFieldLabel">開催会場名</label>
+      <input type="text" id="venueField" value="GAAAT GALLERY FUKUOKA_">
+      <p class="hint">案件マスタの会場を選ぶと自動反映されます（全言語共通）。</p>
+
+      <label id="priceFieldLabel" style="display:none;">価格・オファー文言</label>
+      <input type="text" id="priceField" style="display:none;" placeholder="例: ¥3,300（税込）〜 ／ 数量限定">
+
+      <div class="field-label-row">
+        <label>メインコピー（帯・太字1行目）</label>
+        <label class="lang-toggle"><input type="checkbox" id="langToggle_mainCopy" checked><span>言語別</span></label>
+      </div>
+      <input type="text" id="mainCopyField" value="歴代シリーズを横断する 唯一無二の展示・販売会。">
+
+      <div class="field-label-row">
+        <label id="subCopyFieldLabel">サブコピー（帯・2行目）</label>
+        <label class="lang-toggle"><input type="checkbox" id="langToggle_subCopy" checked><span>言語別</span></label>
+      </div>
+      <input type="text" id="subCopyField" value="全国5都市開催">
+
+      <div class="field-label-row">
+        <label>コピーライト（原画上に小さく表示）</label>
+        <label class="lang-toggle"><input type="checkbox" id="langToggle_copyright" checked><span>言語別</span></label>
+      </div>
+      <input type="text" id="copyrightField" value="©HEADGEAR">
+
+      <div class="field-label-row">
+        <label>追加テキスト（任意・自由に使える項目）</label>
+        <label class="lang-toggle"><input type="checkbox" id="langToggle_extraText" checked><span>言語別</span></label>
+      </div>
+      <input type="text" id="extraTextField" placeholder="例: 会場限定グッズあり、ハッシュタグ、注意書きなど">
+      <p class="hint">タイトル・メインコピー・サブコピー・コピーライト以外に何か追記したい時に使う自由記入欄です。空欄なら何も表示されません。表示位置・サイズは下の「レイアウト微調整」で動かせます（キャンバス上のドラッグ・四隅リサイズにも対応）。</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>レイアウト微調整（版元指定など）</legend>
+      <p class="hint">監修で「ロゴをもう少し大きく」「タイトルを右にずらして」「サブコピーは無し」といった、この案件・このテンプレート固有の指摘が来たときに使います。テンプレートのコード自体は変えず、この案件のセッション内だけで有効な上書きです。「一括生成」にもそのまま反映されるので、都市×言語ぶん手作業でPSDを直す必要はありません。サイズは%（100=元のまま）、位置はpx（＋で右/下）、非表示にチェックするとその要素だけバナーから消えます（レイヤー分け出力には残るので後から復活も可能です）。</p>
+      <div class="adjust-grid">
+        <span></span><span class="adjust-head">サイズ%</span><span class="adjust-head">横位置</span><span class="adjust-head">縦位置</span><span class="adjust-head">非表示</span>
+
+        <label for="adjLogoScale">ロゴ</label>
+        <input type="number" id="adjLogoScale" value="100" step="5">
+        <input type="number" id="adjLogoDx" value="0" step="1">
+        <input type="number" id="adjLogoDy" value="0" step="1">
+        <input type="checkbox" id="adjLogoHidden">
+
+        <label for="adjCopyrightScale">コピーライト</label>
+        <input type="number" id="adjCopyrightScale" value="100" step="5">
+        <input type="number" id="adjCopyrightDx" value="0" step="1">
+        <input type="number" id="adjCopyrightDy" value="0" step="1">
+        <input type="checkbox" id="adjCopyrightHidden">
+
+        <label for="adjTitleScale">タイトル</label>
+        <input type="number" id="adjTitleScale" value="100" step="5">
+        <input type="number" id="adjTitleDx" value="0" step="1">
+        <input type="number" id="adjTitleDy" value="0" step="1">
+        <input type="checkbox" id="adjTitleHidden">
+
+        <label for="adjMainCopyScale">メインコピー</label>
+        <input type="number" id="adjMainCopyScale" value="100" step="5">
+        <input type="number" id="adjMainCopyDx" value="0" step="1">
+        <input type="number" id="adjMainCopyDy" value="0" step="1">
+        <input type="checkbox" id="adjMainCopyHidden">
+
+        <label for="adjSubCopyScale">サブコピー</label>
+        <input type="number" id="adjSubCopyScale" value="100" step="5">
+        <input type="number" id="adjSubCopyDx" value="0" step="1">
+        <input type="number" id="adjSubCopyDy" value="0" step="1">
+        <input type="checkbox" id="adjSubCopyHidden">
+
+        <label for="adjDatesScale">会期情報</label>
+        <input type="number" id="adjDatesScale" value="100" step="5">
+        <input type="number" id="adjDatesDx" value="0" step="1">
+        <input type="number" id="adjDatesDy" value="0" step="1">
+        <input type="checkbox" id="adjDatesHidden">
+
+        <label for="adjExtraTextScale">追加テキスト</label>
+        <input type="number" id="adjExtraTextScale" value="100" step="5">
+        <input type="number" id="adjExtraTextDx" value="0" step="1">
+        <input type="number" id="adjExtraTextDy" value="0" step="1">
+        <input type="checkbox" id="adjExtraTextHidden">
+
+        <label for="adjArtScale">原画（トリミング）</label>
+        <input type="number" id="adjArtScale" value="100" step="5">
+        <input type="number" id="adjArtDx" value="0" step="1">
+        <input type="number" id="adjArtDy" value="0" step="1">
+        <input type="checkbox" id="adjArtHidden">
+      </div>
+      <p class="hint">会期情報の位置調整について: ③④①⑤（フレーム型/スポットライト型/切り抜き型/サイバーUI型）は会場名・価格と1本の行にまとめて表示される仕様のため、位置調整はその行全体を動かします（会場名・価格も一緒に動きます）。②（縦書きタイトル型）と情報帯型は日付だけを独立して動かせます。</p>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button type="button" id="undoAdjustmentsBtn" title="元に戻す（Ctrl+Z）">↶ 元に戻す</button>
+        <button type="button" id="redoAdjustmentsBtn" title="やり直す（Ctrl+Shift+Z）">↷ やり直す</button>
+        <button type="button" id="resetAdjustmentsBtn">この案件の調整をリセット</button>
+      </div>
+
+      <label style="margin-top:14px;">調整プリセット（版元ごとに保存・再利用）</label>
+      <div style="display:flex; gap:8px;">
+        <select id="adjustPresetSelect" style="flex:1;"><option value="">（保存済みプリセットを選択）</option></select>
+        <button type="button" id="loadAdjustPresetBtn">読み込む</button>
+        <button type="button" id="deleteAdjustPresetBtn">削除</button>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <input type="text" id="adjustPresetNameInput" placeholder="プリセット名（例: ○○プロダクション）" style="flex:1;">
+        <button type="button" id="saveAdjustPresetBtn">現在の調整を保存</button>
+      </div>
+      <p class="hint" id="adjustPresetStatus" style="display:none;"></p>
+      <p class="hint">同じ版元から似た指摘が来た時のために、上のレイアウト微調整（サイズ・位置・非表示）を名前付きで保存しておけます。ブラウザに保存されるので、このパソコン・このブラウザでだけ使えます（他の人とは共有されません）。テンプレートをまたいで使い回せますが、テンプレートごとに要素の配置が違うため、テンプレートを変えたら見た目を確認してください。</p>
+    </fieldset>
+
+    <button id="downloadBtn">PNGをダウンロード（1080×1080）</button>
+
+    <fieldset>
+      <legend>レイヤー分け出力</legend>
+      <p class="hint">背景・原画・装飾・テキストの4レイヤーに分けて書き出します。原画を差し替えたり、テキストだけ言語別に調整したりする編集作業に使えます。</p>
+      <button type="button" id="downloadLayersZipBtn">レイヤー別PNGをZIPでダウンロード</button>
+      <button type="button" id="downloadPsdBtn" style="margin-top:8px;">PSD形式でダウンロード（レイヤー分け）</button>
+      <p class="hint" id="layerExportStatus" style="display:none;"></p>
+    </fieldset>
+  </div>
+
+  <div id="stage">
+    <div id="canvasWrap">
+      <canvas id="banner" width="1080" height="1080"></canvas>
+      <div id="adjustHighlight" class="adjust-highlight">
+        <span class="adjust-highlight-label" id="adjustHighlightLabel"></span>
+        <div class="resize-handle handle-nw" data-corner="nw"></div>
+        <div class="resize-handle handle-ne" data-corner="ne"></div>
+        <div class="resize-handle handle-sw" data-corner="sw"></div>
+        <div class="resize-handle handle-se" data-corner="se"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="batchPreviewOverlay">
+    <div class="batch-preview-panel">
+      <div class="batch-preview-header">
+        <h3>一括生成プレビュー</h3>
+        <button type="button" id="closeBatchPreviewBtn" aria-label="閉じる">✕</button>
+      </div>
+      <p class="hint batch-preview-status" id="batchPreviewStatus"></p>
+      <div class="batch-preview-body">
+        <div class="batch-preview-grid" id="batchPreviewGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="exportPreviewOverlay">
+    <div class="batch-preview-panel export-preview-panel">
+      <div class="batch-preview-header">
+        <h3>書き出し前プレビュー</h3>
+        <button type="button" id="closeExportPreviewBtn" aria-label="閉じる">✕</button>
+      </div>
+      <p class="hint batch-preview-status" id="exportPreviewStatus"></p>
+      <div class="batch-preview-body">
+        <div class="batch-preview-grid" id="exportPreviewGrid"></div>
+      </div>
+      <div class="export-preview-actions">
+        <button type="button" id="cancelExportBtn">キャンセル</button>
+        <button type="button" id="confirmExportBtn">選択中の内容で書き出す</button>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="app.js?v=59"></script>
+</body>
+</html>
