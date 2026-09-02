@@ -1263,14 +1263,27 @@ function renderCurrentLayout() {
 
   // Venue — not shown at all in sale mode (see applyBannerPurposeUI)
   useLayer('venue');
+  const venueAdj = adj('venue');
   const venueText = state.bannerPurpose === 'sale' ? '' : els.venue.value;
+  // Fit at the BASE size first, then apply .scale as a plain multiplier
+  // afterward (like dates/mainCopy do) — feeding scale into the fit
+  // search's startSize instead just gets shrunk straight back down to
+  // whatever already fits, so dragging the resize handle bigger would have
+  // no visible effect past that point.
   const venueFit = fitFontSizeTruncate(venueText, colW, 700, FONT_STACK, 34, 22, 0.5);
-  const venueBaseline = logoBottomY - 22;
+  const venueSize = venueFit.size * venueAdj.scale / 100;
+  // Dates below anchor off this FIXED base position, not venue's own
+  // (possibly dragged) baseline — same fix as logoBottomY above, so
+  // repositioning venue doesn't drag dates along with it.
+  const venueBaselineBase = logoBottomY - 22;
+  const venueBaseline = venueBaselineBase + venueAdj.dy;
   if (venueText) {
-    ctx.font = `700 ${venueFit.size}px ${FONT_STACK}`;
+    ctx.font = `700 ${venueSize}px ${FONT_STACK}`;
     ctx.fillStyle = rgbToHex(accent);
     ctx.textAlign = 'left';
-    ctx.fillText(venueFit.text, colLeft, venueBaseline);
+    if (!venueAdj.hidden) ctx.fillText(venueFit.text, colLeft + venueAdj.dx, venueBaseline);
+    const venueW = ctx.measureText(venueFit.text).width;
+    recordBounds('venue', colLeft + venueAdj.dx, venueBaseline - venueSize * 0.8, venueW, venueSize);
   }
 
   if (state.bannerPurpose === 'sale') {
@@ -1324,7 +1337,7 @@ function renderCurrentLayout() {
     const overrideFit = fitFontSizeTruncate(dateOverrideText, colW, 800, FONT_STACK, 58, 24, 0);
     const overrideSize = overrideFit.size * datesAdj.scale / 100;
     ctx.font = `800 ${overrideSize}px ${FONT_STACK}`;
-    const overrideBaseline = venueBaseline - 52 + datesAdj.dy;
+    const overrideBaseline = venueBaselineBase - 52 + datesAdj.dy;
     const overrideW = ctx.measureText(overrideFit.text).width;
     ctx.fillStyle = textHex;
     ctx.textAlign = 'left';
@@ -1335,7 +1348,7 @@ function renderCurrentLayout() {
     const endW = ctx.measureText(dateEndLabel).width;
     const dateBlockW = Math.max(startW, endW);
     const lineGap = 64 * datesAdj.scale / 100;
-    const dateEndBaseline = venueBaseline - 52 + datesAdj.dy;
+    const dateEndBaseline = venueBaselineBase - 52 + datesAdj.dy;
     const dateStartBaseline = dateEndBaseline - lineGap;
 
     ctx.fillStyle = textHex;
@@ -2459,15 +2472,20 @@ function renderVerticalTitleTemplate() {
 
   useLayer('venue');
   // ---- Venue name, just above the band (not shown at all in sale mode) ----
+  const venueAdj = adj('venue');
   const venueLine = state.bannerPurpose === 'sale' ? '' : els.venue.value.trim();
   if (venueLine) {
-    ctx.font = `600 24px ${FONT_STACK}`;
+    const venueSize = Math.round(24 * venueAdj.scale / 100);
+    ctx.font = `600 ${venueSize}px ${FONT_STACK}`;
     ctx.fillStyle = white;
     ctx.textAlign = 'left';
     ctx.shadowColor = 'rgba(0,0,0,0.5)';
     ctx.shadowBlur = 8;
-    ctx.fillText(venueLine, MARGIN, bandTop - 18);
+    const venueX = MARGIN + venueAdj.dx, venueY = bandTop - 18 + venueAdj.dy;
+    if (!venueAdj.hidden) ctx.fillText(venueLine, venueX, venueY);
     ctx.shadowBlur = 0;
+    const venueW = ctx.measureText(venueLine).width;
+    recordBounds('venue', venueX, venueY - venueSize * 0.8, venueW, venueSize);
   }
 
   // ---- Sale-tag + price pills, bottom-right corner of the band ----
