@@ -579,6 +579,30 @@
   .export-preview-panel{
     width:min(1100px, 100%);
   }
+  .export-preview-large{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    margin-bottom:20px;
+  }
+  .export-preview-large img{
+    width:min(420px, 100%);
+    aspect-ratio:1/1;
+    display:block;
+    background:#fff;
+    border-radius:8px;
+    box-shadow:0 10px 30px rgba(0,0,0,.4);
+  }
+  .export-preview-large-label{
+    margin-top:10px;
+    font-size:13px;
+    color:var(--text);
+    text-align:center;
+    line-height:1.5;
+  }
+  .export-preview-large-label .lang{
+    color:var(--muted);
+  }
   #closeExportPreviewBtn{
     background:none;
     border:none;
@@ -944,6 +968,10 @@
       </div>
       <p class="hint batch-preview-status" id="exportPreviewStatus"></p>
       <div class="batch-preview-body">
+        <div class="export-preview-large">
+          <img id="exportPreviewLargeImg" alt="選択中のバナーの大きいプレビュー">
+          <div class="export-preview-large-label" id="exportPreviewLargeLabel"></div>
+        </div>
         <div class="batch-preview-grid" id="exportPreviewGrid"></div>
       </div>
       <div class="export-preview-actions">
@@ -955,6 +983,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=77"></script>
+<script src="app.js?v=78"></script>
 </body>
 </html>

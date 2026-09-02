@@ -521,6 +521,8 @@ const els = {
   exportPreviewOverlay: document.getElementById('exportPreviewOverlay'),
   exportPreviewGrid: document.getElementById('exportPreviewGrid'),
   exportPreviewStatus: document.getElementById('exportPreviewStatus'),
+  exportPreviewLargeImg: document.getElementById('exportPreviewLargeImg'),
+  exportPreviewLargeLabel: document.getElementById('exportPreviewLargeLabel'),
   closeExportPreviewBtn: document.getElementById('closeExportPreviewBtn'),
   cancelExportBtn: document.getElementById('cancelExportBtn'),
   confirmExportBtn: document.getElementById('confirmExportBtn'),
@@ -3464,6 +3466,18 @@ els.mainCopyNoWrapToggle.addEventListener('change', () => {
 let pendingExportAction = null;
 let exportPreviewCancelled = false;
 
+// Full-resolution preview shown above the thumbnail grid for whichever
+// variant is currently selected — the grid thumbnails are downscaled for
+// layout, too small to actually proofread text against. Reads straight
+// from the live `canvas` (already holding the selected variant's render
+// at call time) rather than caching a full-res copy per thumbnail, which
+// would mean up to 20 uncompressed 1080×1080 PNGs sitting in memory at
+// once for a multi-city×language project.
+function updateExportPreviewLarge(cityName, lang) {
+  els.exportPreviewLargeImg.src = canvas.toDataURL('image/png');
+  els.exportPreviewLargeLabel.innerHTML = `${cityName}<span class="lang">　${LANGUAGE_LABELS[lang] || lang}</span>`;
+}
+
 async function showExportPreview(actionFn) {
   pendingExportAction = actionFn;
   const parsedSessionsList = getSelectedBatchSessions();
@@ -3511,6 +3525,10 @@ async function showExportPreview(actionFn) {
     if (isOriginal && !selectedItem) {
       item.classList.add('selected');
       selectedItem = item;
+      // `canvas` currently holds exactly this session/lang's render (this
+      // loop iteration hasn't moved on yet), so grab it straight from
+      // there instead of re-rendering — same trick the click handler uses.
+      updateExportPreviewLarge(cityName, lang);
     }
 
     item.addEventListener('click', () => {
@@ -3519,6 +3537,7 @@ async function showExportPreview(actionFn) {
       Array.from(els.exportPreviewGrid.children).forEach(el => el.classList.remove('selected'));
       item.classList.add('selected');
       selectedItem = item;
+      updateExportPreviewLarge(cityName, lang);
     });
 
     els.exportPreviewGrid.appendChild(item);
