@@ -5,7 +5,7 @@
 <title>GAAAT バナー自動生成ツール</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Noto+Sans+JP:wght@700;900&family=Playfair+Display:wght@700&family=Shippori+Mincho:wght@700&family=Fredoka:wght@700&family=M+PLUS+Rounded+1c:wght@700&family=Orbitron:wght@700&family=Inter:wght@700&family=Anton&family=Bangers&family=Reggae+One&family=Cardo:wght@700&family=Yuji+Syuku&family=Press+Start+2P&family=DotGothic16&family=Poppins:wght@700&family=Zen+Kaku+Gothic+New:wght@700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Noto+Sans+JP:wght@700;900&family=Playfair+Display:wght@700&family=Shippori+Mincho:wght@700&family=Fredoka:wght@700&family=M+PLUS+Rounded+1c:wght@700&family=Orbitron:wght@700&family=Inter:wght@700&family=Anton&family=Bangers&family=Reggae+One&family=Cardo:wght@700&family=Yuji+Syuku&family=Press+Start+2P&family=DotGothic16&family=Poppins:wght@700&family=Zen+Kaku+Gothic+New:wght@700;900&family=Bebas+Neue&family=Stick&family=Pacifico&family=Yomogi&family=Abril+Fatface&family=Zen+Old+Mincho:wght@700&family=Archivo+Black&family=Dela+Gothic+One&family=Baloo+2:wght@700&family=Kosugi+Maru&family=Permanent+Marker&family=Klee+One:wght@600&family=Bungee&family=RocknRoll+One&family=Alfa+Slab+One&family=Mochiy+Pop+One&family=Staatliches&family=Yusei+Magic&family=Cinzel:wght@700&family=New+Tegomin&family=Caveat:wght@700&family=Kiwi+Maru:wght@500&family=VT323&family=Julius+Sans+One&family=Hina+Mincho&family=Special+Elite&family=Shippori+Antique&family=Cormorant+Garamond:wght@700&family=Kaisei+Opti:wght@700&display=swap" rel="stylesheet">
 <style>
   :root{
     --panel-bg:#1c1e22;
@@ -645,6 +645,87 @@
     cursor:pointer;
     font-size:13px;
   }
+
+  /* ---- Title font picker (Google Slides–style: each entry rendered in
+     its own font, grouped おすすめ / よく使う / その他) ---- */
+  #titleFontPickerBtn{
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    background:var(--panel-bg2);
+    border:1px solid var(--border);
+    border-radius:6px;
+    color:var(--text);
+    font-size:15px;
+    font-weight:400;
+    letter-spacing:normal;
+    padding:9px 12px;
+    cursor:pointer;
+    text-align:left;
+  }
+  #titleFontPickerBtn:hover{border-color:var(--muted);}
+  #titleFontPickerBtn .chevron{
+    color:var(--muted);
+    font-size:11px;
+    flex-shrink:0;
+  }
+  #titleFontPickerPanel{
+    display:none;
+    position:fixed;
+    z-index:1000;
+    background:var(--panel-bg2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    box-shadow:0 12px 30px rgba(0,0,0,.5);
+    max-height:min(420px, 70vh);
+    overflow-y:auto;
+    padding:6px 0;
+  }
+  #titleFontPickerPanel.open{display:block;}
+  .font-picker-group-label{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--muted);
+    padding:8px 14px 4px;
+  }
+  .font-picker-divider{
+    border:none;
+    border-top:1px solid var(--border);
+    margin:6px 0;
+  }
+  .font-picker-item{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:7px 14px;
+    cursor:pointer;
+  }
+  .font-picker-item:hover{background:rgba(255,255,255,.06);}
+  .font-picker-item .check{
+    width:14px;
+    flex-shrink:0;
+    color:var(--accent);
+    font-size:13px;
+  }
+  .font-picker-item .info{min-width:0;}
+  .font-picker-item .preview{
+    font-size:15px;
+    color:var(--text);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .font-picker-item .families{
+    font-size:10px;
+    color:var(--muted);
+    margin-top:2px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
 </style>
 </head>
 <body>
@@ -767,9 +848,10 @@
       <label class="lang-toggle"><input type="checkbox" id="titleNoWrapToggle" checked><span>1行に収める（自動改行しない・収まらない分は自動縮小）</span></label>
       <p class="hint">案件マスタの企画タイトルはほとんどが1行の短い文言です（例:「頭文字D ART EXHIBITION by GAAAT」）。1行だけ入力すればOKです。案件マスタの貼り付け／スプレッドシート取得を行うと、企画タイトル（日本語）で選択中の言語欄の内容が丸ごと上書きされます（Enterで追加した2行目以降がある場合はそれも含めて置き換わります）。「言語別」がオンの場合、他の言語に切り替えると翻訳前のタイトルがコピーされるので、そこから訳文に書き換えてください。ブランド名などで訳さず統一したい場合はチェックを外してください。長くて自動的に2行に折り返される際、改行位置が意図と違う場合や、意図的に複数行に分けたい場合は、改行したい位置でEnterを押すか、半角の「｜」を入れてください（例:「GAAAT銀魂｜藝術展」→「GAAAT銀魂」「藝術展」の2行）。折り返し自体を止めたい場合は上の「1行に収める」にチェックしてください（文字が小さくなっても1行のまま表示されます）。</p>
 
-      <label for="titleFontSelect">タイトルフォント</label>
-      <select id="titleFontSelect"></select>
-      <p class="hint">展示会タイトル（および⑤サイバーUI型のキャッチコピー）に使うフォントです。作品の世界観に合わせて選んでください。全テンプレート・全言語・全案件（一括生成含む）で共通のプロジェクト単位の設定です。一覧は「おすすめ」→「よく使うフォント」（このブラウザでの選択回数順）→「その他」の順に並びます。</p>
+      <label id="titleFontPickerLabel" for="titleFontPickerBtn">タイトルフォント</label>
+      <button type="button" id="titleFontPickerBtn" aria-haspopup="listbox"><span class="preview"></span><span class="chevron">▾</span></button>
+      <div id="titleFontPickerPanel" role="listbox" aria-labelledby="titleFontPickerLabel"></div>
+      <p class="hint">展示会タイトル（および⑤サイバーUI型のキャッチコピー）に使うフォントです。作品の世界観に合わせて選んでください。全テンプレート・全言語・全案件（一括生成含む）で共通のプロジェクト単位の設定です。ボタンを押すと、各フォントの見た目とフォント名（英字／和文）が一覧表示されます。「おすすめ」→「よく使うフォント」（このブラウザでの選択回数順）→「その他」の順に並びます。</p>
 
       <label id="dateFieldLabel">会期情報（開始日・終了日）</label>
       <div class="row">
@@ -977,6 +1059,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=84"></script>
+<script src="app.js?v=85"></script>
 </body>
 </html>

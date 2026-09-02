@@ -3,15 +3,16 @@
 const CANVAS_SIZE = 1080;
 const FONT_STACK = '"Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
 // Distinctive display font for the one big headline per template (展示会タ
-// イトル and the cyber-UI catchphrase). User-selectable via #titleFontSelect
-// (state.titleFont) — each preset pairs a distinctive Latin display face
-// with a same-mood CJK face for glyphs the Latin one doesn't cover, falling
-// back to the plain system stack for scripts neither covers (e.g. Arabic) or
-// if the webfonts fail to load. TITLE_FONT_STACK itself is reassigned from
-// the selected preset at the top of every render() — every template just
-// reads it inline, so nothing else needs to change per template.
-// `recommended: true` presets are pinned to the top of #titleFontSelect
-// (ahead of the usage-based "よく使う" group) — see renderTitleFontOptions().
+// イトル and the cyber-UI catchphrase). User-selectable via the
+// #titleFontPickerBtn/#titleFontPickerPanel custom picker (state.titleFont)
+// — each preset pairs a distinctive Latin display face with a same-mood CJK
+// face for glyphs the Latin one doesn't cover, falling back to the plain
+// system stack for scripts neither covers (e.g. Arabic) or if the webfonts
+// fail to load. TITLE_FONT_STACK itself is reassigned from the selected
+// preset at the top of every render() — every template just reads it
+// inline, so nothing else needs to change per template.
+// `recommended: true` presets are pinned to the top of the picker (ahead of
+// the usage-based "よく使う" group) — see renderTitleFontPicker().
 const TITLE_FONT_PRESETS = {
   gothic: { label: '太字ゴシック（デフォルト）', stack: `"Oswald", "Noto Sans JP", ${FONT_STACK}`, recommended: true },
   mincho: { label: '明朝・上品', stack: `"Playfair Display", "Shippori Mincho", ${FONT_STACK}` },
@@ -22,7 +23,22 @@ const TITLE_FONT_PRESETS = {
   comic: { label: 'コミック・レトロポップ', stack: `"Bangers", "Reggae One", ${FONT_STACK}` },
   brush: { label: '筆文字・和風', stack: `"Cardo", "Yuji Syuku", ${FONT_STACK}`, recommended: true },
   pixel: { label: 'ドット・レトロゲーム風', stack: `"Press Start 2P", "DotGothic16", ${FONT_STACK}` },
-  elegant: { label: 'モダン・エレガント', stack: `"Poppins", "Zen Kaku Gothic New", ${FONT_STACK}` }
+  elegant: { label: 'モダン・エレガント', stack: `"Poppins", "Zen Kaku Gothic New", ${FONT_STACK}` },
+  bebas: { label: 'コンデンス・スタイリッシュ', stack: `"Bebas Neue", "Stick", ${FONT_STACK}` },
+  script: { label: '手書き風スクリプト', stack: `"Pacifico", "Yomogi", ${FONT_STACK}` },
+  classic: { label: 'クラシック・格調高い', stack: `"Abril Fatface", "Zen Old Mincho", ${FONT_STACK}` },
+  blackGrotesk: { label: '極太グロテスク', stack: `"Archivo Black", "Dela Gothic One", ${FONT_STACK}` },
+  friendlyRound: { label: 'フレンドリー・丸ゴシック', stack: `"Baloo 2", "Kosugi Maru", ${FONT_STACK}` },
+  markerPop: { label: 'マーカー手書き・ポップ', stack: `"Permanent Marker", "Klee One", ${FONT_STACK}` },
+  urbanBold: { label: 'アーバン・重厚感', stack: `"Bungee", "RocknRoll One", ${FONT_STACK}` },
+  slabHeavy: { label: '極太スラブセリフ', stack: `"Alfa Slab One", "Mochiy Pop One", ${FONT_STACK}` },
+  condensedImpact: { label: 'コンデンス・見出し向け', stack: `"Staatliches", "Yusei Magic", ${FONT_STACK}` },
+  engraved: { label: '彫刻風・重厚', stack: `"Cinzel", "New Tegomin", ${FONT_STACK}` },
+  handwriting: { label: 'ナチュラル手書き', stack: `"Caveat", "Kiwi Maru", ${FONT_STACK}` },
+  terminal: { label: 'レトロ端末・ドット', stack: `"VT323", "DotGothic16", ${FONT_STACK}` },
+  elegantThin: { label: '上品・細字エレガント', stack: `"Julius Sans One", "Hina Mincho", ${FONT_STACK}` },
+  typewriter: { label: 'タイプライター・ヴィンテージ', stack: `"Special Elite", "Shippori Antique", ${FONT_STACK}` },
+  warmSerif: { label: '温かみのあるセリフ', stack: `"Cormorant Garamond", "Kaisei Opti", ${FONT_STACK}` }
 };
 function getTitleFontStack() {
   const preset = TITLE_FONT_PRESETS[state.titleFont];
@@ -32,8 +48,8 @@ let TITLE_FONT_STACK = TITLE_FONT_PRESETS.gothic.stack;
 
 // How many times each font preset has been picked, in THIS browser only (no
 // backend — same zero-server design as the adjustment presets below). Used
-// to surface a "よく使う" group in #titleFontSelect, see
-// renderTitleFontOptions().
+// to surface a "よく使う" group in the font picker, see
+// renderTitleFontPicker().
 const TITLE_FONT_USAGE_KEY = 'gaaat-banner-tool:title-font-usage';
 function loadTitleFontUsage() {
   try {
@@ -485,7 +501,8 @@ const els = {
   textPicker: document.getElementById('textColorPicker'),
   resetColors: document.getElementById('resetColorsBtn'),
   title: document.getElementById('titleField'),
-  titleFontSelect: document.getElementById('titleFontSelect'),
+  titleFontPickerBtn: document.getElementById('titleFontPickerBtn'),
+  titleFontPickerPanel: document.getElementById('titleFontPickerPanel'),
   titleNoWrapToggle: document.getElementById('titleNoWrapToggle'),
   mainCopyNoWrapToggle: document.getElementById('mainCopyNoWrapToggle'),
   dateStart: document.getElementById('dateStart'),
@@ -3468,16 +3485,47 @@ els.bannerPurposeSelect.addEventListener('change', () => {
   render();
 });
 
-// Builds #titleFontSelect's <option>s, grouped おすすめ → よく使う → その他
-// (in that order) instead of the flat declaration order in
-// TITLE_FONT_PRESETS. "よく使う" is populated from loadTitleFontUsage() —
-// any preset already shown under おすすめ is skipped here so it isn't
-// listed twice, and presets with equal usage counts keep their
-// TITLE_FONT_PRESETS declaration order (Array#sort is stable). Called once
-// at startup and again after every selection (see the change listener
-// below) so a font just picked moves into "よく使う" the next time the
-// dropdown opens.
-function renderTitleFontOptions() {
+// The first two families of a preset's stack — the distinctive Latin
+// display face and its CJK pair — as plain unquoted strings. Used both for
+// the picker's small "families" sub-label and for targeted webfont loading.
+function titleFontFamilyNames(key) {
+  return TITLE_FONT_PRESETS[key].stack.split(',').slice(0, 2).map(s => s.trim().replace(/^"|"$/g, ''));
+}
+
+// Canvas fillText() silently substitutes the next font in the stack if the
+// requested webfont hasn't actually been downloaded yet — unlike real DOM
+// text, drawing to a <canvas> never itself triggers the browser to fetch a
+// font, so the newly selected preset would otherwise flash the fallback
+// system font until something else on the page happens to need it. Loads
+// just the ONE selected preset's pair (not all 25 — with this many presets,
+// force-loading everyone's fonts up front would mean fetching ~50 font
+// files nobody may ever pick) and re-renders once ready in case render()
+// already ran against the fallback. Raced against a timeout in case the
+// network blocks fonts.gstatic.com — falls back to FONT_STACK either way.
+function loadCanvasTitleFont(key) {
+  Promise.race([
+    Promise.all(titleFontFamilyNames(key).map(family => document.fonts.load(`700 100px "${family}"`))),
+    new Promise(resolve => setTimeout(resolve, 3000))
+  ]).then(() => render()).catch(() => {});
+}
+
+// Builds the custom font picker: the trigger button's own preview (current
+// selection, rendered in its own font) and the dropdown panel's grouped
+// list — おすすめ → よく使う → その他 (in that order) rather than
+// TITLE_FONT_PRESETS' flat declaration order. "よく使う" is populated from
+// loadTitleFontUsage() — any preset already shown under おすすめ is skipped
+// here so it isn't listed twice, and presets with equal usage counts keep
+// their declaration order (Array#sort is stable). Called once at startup
+// and again after every selection so a font just picked moves into "よく
+// 使う" the next time the panel opens. Each item's preview text is real DOM
+// text styled with that preset's own font-family — unlike the canvas, the
+// browser fetches and swaps it in on its own, no document.fonts.load()
+// needed here (that's only for the <canvas>, see loadCanvasTitleFont()).
+function renderTitleFontPicker() {
+  const current = TITLE_FONT_PRESETS[state.titleFont] || TITLE_FONT_PRESETS.gothic;
+  els.titleFontPickerBtn.querySelector('.preview').textContent = current.label;
+  els.titleFontPickerBtn.querySelector('.preview').style.fontFamily = current.stack;
+
   const usage = loadTitleFontUsage();
   const keys = Object.keys(TITLE_FONT_PRESETS);
   const recommended = keys.filter(k => TITLE_FONT_PRESETS[k].recommended);
@@ -3492,29 +3540,84 @@ function renderTitleFontOptions() {
     ['その他', rest]
   ];
 
-  const prevValue = els.titleFontSelect.value || state.titleFont;
-  els.titleFontSelect.innerHTML = '';
+  els.titleFontPickerPanel.innerHTML = '';
+  let firstGroup = true;
   groups.forEach(([groupLabel, groupKeys]) => {
     if (!groupKeys.length) return;
-    const optgroup = document.createElement('optgroup');
-    optgroup.label = groupLabel;
+    if (!firstGroup) els.titleFontPickerPanel.appendChild(document.createElement('hr')).className = 'font-picker-divider';
+    firstGroup = false;
+    const groupHeading = document.createElement('div');
+    groupHeading.className = 'font-picker-group-label';
+    groupHeading.textContent = groupLabel;
+    els.titleFontPickerPanel.appendChild(groupHeading);
+
     groupKeys.forEach(key => {
-      const opt = document.createElement('option');
-      opt.value = key;
-      opt.textContent = TITLE_FONT_PRESETS[key].label;
-      optgroup.appendChild(opt);
+      const preset = TITLE_FONT_PRESETS[key];
+      const item = document.createElement('div');
+      item.className = 'font-picker-item';
+      item.setAttribute('role', 'option');
+      item.dataset.fontKey = key;
+      item.setAttribute('aria-selected', String(key === state.titleFont));
+
+      const check = document.createElement('span');
+      check.className = 'check';
+      check.textContent = key === state.titleFont ? '✓' : '';
+
+      const info = document.createElement('div');
+      info.className = 'info';
+      const preview = document.createElement('div');
+      preview.className = 'preview';
+      preview.textContent = preset.label;
+      preview.style.fontFamily = preset.stack;
+      const families = document.createElement('div');
+      families.className = 'families';
+      families.textContent = titleFontFamilyNames(key).join(' / ');
+      info.appendChild(preview);
+      info.appendChild(families);
+
+      item.appendChild(check);
+      item.appendChild(info);
+      item.addEventListener('click', () => selectTitleFont(key));
+      els.titleFontPickerPanel.appendChild(item);
     });
-    els.titleFontSelect.appendChild(optgroup);
   });
-  els.titleFontSelect.value = prevValue;
 }
 
-els.titleFontSelect.addEventListener('change', () => {
-  state.titleFont = els.titleFontSelect.value;
-  bumpTitleFontUsage(state.titleFont);
-  renderTitleFontOptions();
+function selectTitleFont(key) {
+  state.titleFont = key;
+  bumpTitleFontUsage(key);
+  loadCanvasTitleFont(key);
+  renderTitleFontPicker();
+  closeTitleFontPicker();
   render();
+}
+
+function openTitleFontPicker() {
+  const rect = els.titleFontPickerBtn.getBoundingClientRect();
+  els.titleFontPickerPanel.style.top = `${rect.bottom + 4}px`;
+  els.titleFontPickerPanel.style.left = `${rect.left}px`;
+  els.titleFontPickerPanel.style.width = `${rect.width}px`;
+  els.titleFontPickerPanel.classList.add('open');
+  els.titleFontPickerBtn.setAttribute('aria-expanded', 'true');
+}
+function closeTitleFontPicker() {
+  els.titleFontPickerPanel.classList.remove('open');
+  els.titleFontPickerBtn.setAttribute('aria-expanded', 'false');
+}
+
+els.titleFontPickerBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (els.titleFontPickerPanel.classList.contains('open')) closeTitleFontPicker();
+  else openTitleFontPicker();
 });
+document.addEventListener('click', (e) => {
+  if (!els.titleFontPickerPanel.contains(e.target) && e.target !== els.titleFontPickerBtn) closeTitleFontPicker();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeTitleFontPicker();
+});
+window.addEventListener('resize', closeTitleFontPicker);
+document.getElementById('panel').addEventListener('scroll', closeTitleFontPicker);
 
 els.titleNoWrapToggle.addEventListener('change', () => {
   state.titleNoWrap = els.titleNoWrapToggle.checked;
@@ -3524,32 +3627,6 @@ els.mainCopyNoWrapToggle.addEventListener('change', () => {
   state.mainCopyNoWrap = els.mainCopyNoWrapToggle.checked;
   render();
 });
-
-// Canvas fillText() silently substitutes the next font in the stack if the
-// requested webfont hasn't actually been downloaded yet — unlike real DOM
-// text, drawing to a <canvas> never itself triggers the browser to fetch a
-// font. The <link> tag in <head> only registers what's *available*, so
-// without this, switching to a preset nobody has "used" elsewhere on the
-// page would silently render in the fallback font, found by checking
-// document.fonts.check() after Oswald/Noto Sans JP (used from day one, so
-// already fetched) came back true but every newer preset font came back
-// false. Force-load every webfont referenced by TITLE_FONT_PRESETS up front
-// (both the Latin display face AND its CJK pair — an earlier version of
-// this only loaded the first family per preset, which happened to work for
-// 3 of 5 presets purely because they reuse the already-loaded Noto Sans JP
-// as their second family, and silently left Shippori Mincho/M PLUS Rounded
-// 1c never fetched), and re-render once each one actually lands in case
-// render() already ran against the fallback. Derived from
-// TITLE_FONT_PRESETS itself (each stack's first two families — the
-// distinctive Latin face and its CJK pair) rather than a hand-maintained
-// list, so a newly added preset is force-loaded automatically.
-const TITLE_FONT_WEBFONT_FAMILIES = [...new Set(
-  Object.values(TITLE_FONT_PRESETS).flatMap(p => p.stack.split(',').slice(0, 2).map(s => s.trim().replace(/^"|"$/g, '')))
-)];
-TITLE_FONT_WEBFONT_FAMILIES
-  .forEach(family => {
-    document.fonts.load(`700 100px "${family}"`).then(() => render()).catch(() => {});
-  });
 
 // ---------- Pre-export preview ----------
 // A last-look check before any of the 3 export actions (PNG / レイヤー別ZIP /
@@ -4973,19 +5050,9 @@ syncColorPickers();
 applyBannerPurposeUI();
 initGoogleAuthUI();
 renderLangBar();
-renderTitleFontOptions();
+renderTitleFontPicker();
 render();
 
-// Canvas text only picks up a webfont once the browser has actually
-// finished loading it — a <link> tag alone doesn't make Canvas wait, so the
-// very first paint above may briefly fall back to the system font. Re-render
-// once the title webfonts are ready (or after a timeout if the network
-// blocks fonts.gstatic.com, matching the FONT_STACK fallback either way).
-Promise.race([
-  Promise.all([
-    document.fonts.load('700 100px "Oswald"'),
-    document.fonts.load('700 100px "Noto Sans JP"'),
-    document.fonts.load('900 100px "Noto Sans JP"')
-  ]),
-  new Promise(resolve => setTimeout(resolve, 3000))
-]).then(render).catch(() => {});
+// First paint above may briefly fall back to the system font until the
+// default preset's webfonts land — see loadCanvasTitleFont().
+loadCanvasTitleFont(state.titleFont);
