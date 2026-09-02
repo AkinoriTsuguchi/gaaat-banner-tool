@@ -227,6 +227,22 @@
   .adjust-highlight.dragging .adjust-highlight-label{
     background:#ffd24d;
   }
+  .center-guide{
+    position:absolute;
+    display:none;
+    pointer-events:none;
+    background:#ff4d6d;
+    z-index:5;
+  }
+  /* left/top set inline by JS (updateGuideLines) — target can be the
+     canvas center or another element's center, not just the canvas
+     midpoint, so this can't be a fixed 50%. */
+  .center-guide.vertical{
+    top:0; bottom:0; width:1px;
+  }
+  .center-guide.horizontal{
+    left:0; right:0; height:1px;
+  }
   .resize-handle{
     position:absolute;
     width:12px;
@@ -610,7 +626,7 @@
 <body>
   <div id="panel">
     <h1>GAAAT バナー自動生成ツール</h1>
-    <p class="sub">1080×1080pxの展示会バナーを自動生成します。キャラクター原画は一切加工せずレイヤーとして配置し、配色は原画から自動抽出します。</p>
+    <p class="sub">1080×1080pxの展示会バナーを自動生成します。素材は一切加工せずレイヤーとして配置し、配色は素材から自動抽出します。</p>
 
     <fieldset>
       <legend>バナー用途</legend>
@@ -627,18 +643,18 @@
         <option value="current">情報帯型(現行レイアウト)</option>
         <option value="cutout1">①キャラクター切り抜き型(ポップ・少年漫画系)</option>
         <option value="vertical2">②縦書きタイトル型(レトロ・和風系)</option>
-        <option value="frame3">③壁掛けフレーム型(汎用・ギャラリー風)</option>
-        <option value="frame4">④スポットライト額装型(ヒーロー・特撮・重厚系)</option>
+        <option value="frame3">③ギャラリー型(汎用・素材をそのまま表示)</option>
+        <option value="frame4">④スポットライト型(ヒーロー・特撮・重厚系)</option>
         <option value="cyberui5">⑤サイバーUI型(SF・近未来系)</option>
       </select>
       <label class="checkbox-row" style="margin-top:10px;">
         <input type="checkbox" id="autoTemplateCheckbox" checked>
-        <span>原画の配色からレイアウトを自動選択</span>
+        <span>素材の配色からレイアウトを自動選択</span>
       </label>
-      <p class="hint">作品の世界観に合わせてレイアウトを切り替えられます。原画をアップロードすると、配色の傾向（暖色/寒色・彩度・明るさ）から自動的にふさわしいレイアウトを選びます。手動でプルダウンを変更すると自動選択はオフになります。</p>
+      <p class="hint">作品の世界観に合わせてレイアウトを切り替えられます。素材をアップロードすると、配色の傾向（暖色/寒色・彩度・明るさ）から自動的にふさわしいレイアウトを選びます。手動でプルダウンを変更すると自動選択はオフになります。</p>
     </fieldset>
 
-    <fieldset>
+    <fieldset id="sessionMasterFieldset">
       <legend>案件マスタから貼り付け</legend>
 
       <p class="hint" id="sheetsSetupNote"></p>
@@ -649,7 +665,7 @@
       <input type="text" id="sheetsUrlInput" placeholder="該当タブを開いた状態のスプレッドシートURL（#gid=... 付き）を貼り付け">
       <button type="button" id="loadSheetsBtn" style="margin-top:8px;">スプレッドシートを読み込む</button>
       <p class="hint" id="sheetsStatus" style="display:none;"></p>
-      <p class="hint">ここでログインすると、下の「キャラクター原画」欄のGoogleドライブ連携にも同じログインが使えます。URLは該当案件のタブを開いた状態のものを貼ってください。</p>
+      <p class="hint">ここでログインすると、下の「素材選定」欄のGoogleドライブ連携にも同じログインが使えます。URLは該当案件のタブを開いた状態のものを貼ってください。</p>
 
       <label>または範囲をコピーして貼り付け</label>
       <textarea id="pasteArea" placeholder="スプレッドシートで範囲を選択してコピー（⌘C）し、ここに貼り付けてください。「案件基本情報」「会期/巡回情報」のブロックをまとめて貼っても、1都市分だけでもOKです。" rows="4"></textarea>
@@ -679,7 +695,7 @@
     </fieldset>
 
     <fieldset>
-      <legend>キャラクター原画</legend>
+      <legend>素材選定</legend>
       <input type="file" id="artFile" accept="image/*">
       <p class="hint">アップロードした画像はリサイズ・トリミング（配置調整）のみ行い、色調補正・加工は一切行いません。</p>
 
@@ -711,8 +727,8 @@
           <span>文字色</span>
         </div>
       </div>
-      <p class="hint">原画から「背景＝メインカラー」「アクセント＝次に目立つ色」を自動抽出し、コントラスト比から文字色（白/黒）を自動選択します。手動で上書きも可能です。</p>
-      <button id="resetColorsBtn">原画から再抽出</button>
+      <p class="hint">素材から「背景＝メインカラー」「アクセント＝次に目立つ色」を自動抽出し、コントラスト比から文字色（白/黒）を自動選択します。手動で上書きも可能です。</p>
+      <button id="resetColorsBtn">素材から再抽出</button>
     </fieldset>
 
     <fieldset>
@@ -723,7 +739,8 @@
         <label class="lang-toggle"><input type="checkbox" id="langToggle_title" checked><span>言語別</span></label>
       </div>
       <textarea id="titleField">GINTAMA ART EXHIBITION by GAAAT</textarea>
-      <p class="hint">案件マスタの企画タイトルはほとんどが1行の短い文言です（例:「頭文字D ART EXHIBITION by GAAAT」）。1行だけ入力すればOKで、2行目・3行目は「THE MOBILE POLICE」「Mobile Police Patlabor - Art of GEN【RELOAD】」のような、大見出しとは別に英字タグラインや正式名称を添えたい特殊な案件（パトレイバー展など）でだけ使う任意欄です。案件マスタの貼り付け／スプレッドシート取得を行うと、企画タイトル（日本語）で選択中の言語欄の1行目が自動的に上書きされます。「言語別」がオンの場合、他の言語に切り替えると翻訳前のタイトルがコピーされるので、そこから訳文に書き換えてください。ブランド名などで訳さず統一したい場合はチェックを外してください。1行目が長くて自動的に2行に折り返される際、改行位置が意図と違う場合は、改行したい位置に半角の「｜」を入れてください（例:「GAAAT銀魂｜藝術展」→「GAAAT銀魂」「藝術展」の2行）。</p>
+      <label class="lang-toggle"><input type="checkbox" id="titleNoWrapToggle"><span>1行に収める（自動改行しない・収まらない分は自動縮小）</span></label>
+      <p class="hint">案件マスタの企画タイトルはほとんどが1行の短い文言です（例:「頭文字D ART EXHIBITION by GAAAT」）。1行だけ入力すればOKで、2行目・3行目は「THE MOBILE POLICE」「Mobile Police Patlabor - Art of GEN【RELOAD】」のような、大見出しとは別に英字タグラインや正式名称を添えたい特殊な案件（パトレイバー展など）でだけ使う任意欄です。案件マスタの貼り付け／スプレッドシート取得を行うと、企画タイトル（日本語）で選択中の言語欄の1行目が自動的に上書きされます。「言語別」がオンの場合、他の言語に切り替えると翻訳前のタイトルがコピーされるので、そこから訳文に書き換えてください。ブランド名などで訳さず統一したい場合はチェックを外してください。1行目が長くて自動的に2行に折り返される際、改行位置が意図と違う場合は、改行したい位置に半角の「｜」を入れてください（例:「GAAAT銀魂｜藝術展」→「GAAAT銀魂」「藝術展」の2行）。折り返し自体を止めたい場合は上の「1行に収める」にチェックしてください（文字が小さくなっても1行のまま表示されます）。</p>
 
       <label for="titleFontSelect">タイトルフォント</label>
       <select id="titleFontSelect">
@@ -737,14 +754,14 @@
 
       <label id="dateFieldLabel">会期情報（開始日・終了日）</label>
       <div class="row">
-        <div>
+        <div id="dateStartWrap">
           <input type="date" id="dateStart" value="2026-08-21">
         </div>
         <div>
           <input type="date" id="dateEnd" value="2026-08-24">
         </div>
       </div>
-      <p class="hint">日付・曜日の表示形式は選択中の言語に合わせて自動で変わります（例: 08.21 (Fri.) / 08.21（金））。案件マスタの会場を選ぶと自動反映されます（全言語共通）。オンライン販売用では任意項目です。</p>
+      <p class="hint" id="dateFieldHint">日付・曜日の表示形式は選択中の言語に合わせて自動で変わります（例: 08.21 (Fri.) / 08.21（金））。案件マスタの会場を選ぶと自動反映されます（全言語共通）。</p>
 
       <label for="dateOverrideField">会期情報の表示テキスト（任意・自由入力）</label>
       <input type="text" id="dateOverrideField" placeholder="空欄なら上の開始日・終了日から自動生成されます">
@@ -752,16 +769,25 @@
 
       <label id="venueFieldLabel">開催会場名</label>
       <input type="text" id="venueField" value="GAAAT GALLERY FUKUOKA_">
-      <p class="hint">案件マスタの会場を選ぶと自動反映されます（全言語共通）。</p>
+      <p class="hint" id="venueFieldHint">案件マスタの会場を選ぶと自動反映されます（全言語共通）。</p>
 
-      <label id="priceFieldLabel" style="display:none;">価格・オファー文言</label>
+      <label id="priceFieldLabel" style="display:none;">価格・オファー文言（任意）</label>
       <input type="text" id="priceField" style="display:none;" placeholder="例: ¥3,300（税込）〜 ／ 数量限定">
+      <p class="hint" id="priceFieldHint" style="display:none;">空欄なら価格は一切表示されません。実際の販売額と食い違うと誤解を招くため、金額は自動生成・自動補完せず、正確な額を確認できた時だけ手入力してください。</p>
+
+      <div class="field-label-row" style="display:none;">
+        <label id="saleTagFieldLabel">セールタグバッジ（例: アート作品 オンライン販売中）※任意</label>
+        <label class="lang-toggle"><input type="checkbox" id="langToggle_saleTag" checked><span>言語別</span></label>
+      </div>
+      <input type="text" id="saleTagField" style="display:none;" placeholder="例: アート作品 オンライン販売中（空欄なら表示されません）">
+      <p class="hint" id="saleTagHint" style="display:none;">GAAATの実制作物にあるような、CTAボタン的に使えるバッジです。空欄の場合は何も表示されません（自動で文言は入りません）。</p>
 
       <div class="field-label-row">
         <label>メインコピー（帯・太字1行目）</label>
         <label class="lang-toggle"><input type="checkbox" id="langToggle_mainCopy" checked><span>言語別</span></label>
       </div>
       <input type="text" id="mainCopyField" value="歴代シリーズを横断する 唯一無二の展示・販売会。">
+      <label class="lang-toggle"><input type="checkbox" id="mainCopyNoWrapToggle"><span>1行に収める（自動改行しない・収まらない分は自動縮小）</span></label>
 
       <div class="field-label-row">
         <label id="subCopyFieldLabel">サブコピー（帯・2行目）</label>
@@ -770,7 +796,7 @@
       <input type="text" id="subCopyField" value="全国5都市開催">
 
       <div class="field-label-row">
-        <label>コピーライト（原画上に小さく表示）</label>
+        <label>コピーライト（素材上に小さく表示）</label>
         <label class="lang-toggle"><input type="checkbox" id="langToggle_copyright" checked><span>言語別</span></label>
       </div>
       <input type="text" id="copyrightField" value="©HEADGEAR">
@@ -785,7 +811,7 @@
 
     <fieldset>
       <legend>レイアウト微調整（版元指定など）</legend>
-      <p class="hint">監修で「ロゴをもう少し大きく」「タイトルを右にずらして」「サブコピーは無し」といった、この案件・このテンプレート固有の指摘が来たときに使います。テンプレートのコード自体は変えず、この案件のセッション内だけで有効な上書きです。「一括生成」にもそのまま反映されるので、都市×言語ぶん手作業でPSDを直す必要はありません。サイズは%（100=元のまま）、位置はpx（＋で右/下）、非表示にチェックするとその要素だけバナーから消えます（レイヤー分け出力には残るので後から復活も可能です）。</p>
+      <p class="hint">監修で「ロゴをもう少し大きく」「タイトルを右にずらして」「サブコピーは無し」といった、この案件・このテンプレート固有の指摘が来たときに使います。テンプレートのコード自体は変えず、この案件のセッション内だけで有効な上書きです。「一括生成」にもそのまま反映されるので、都市×言語ぶん手作業でPSDを直す必要はありません。サイズは%（100=元のまま）、位置はpx（＋で右/下）、非表示にチェックするとその要素だけバナーから消えます（レイヤー分け出力には残るので後から復活も可能です）。キャンバス上で要素をドラッグして中央付近まで動かすと、ピンクのガイド線が出て自動的に中央に吸着します（Canvaなどと同じ操作感です）。</p>
       <div class="adjust-grid">
         <span></span><span class="adjust-head">サイズ%</span><span class="adjust-head">横位置</span><span class="adjust-head">縦位置</span><span class="adjust-head">非表示</span>
 
@@ -831,13 +857,25 @@
         <input type="number" id="adjExtraTextDy" value="0" step="1">
         <input type="checkbox" id="adjExtraTextHidden">
 
-        <label for="adjArtScale">原画（トリミング）</label>
+        <label for="adjArtScale">素材（トリミング）</label>
         <input type="number" id="adjArtScale" value="100" step="5">
         <input type="number" id="adjArtDx" value="0" step="1">
         <input type="number" id="adjArtDy" value="0" step="1">
         <input type="checkbox" id="adjArtHidden">
+
+        <label for="adjVenueScale">価格バッジ（オンライン販売用）</label>
+        <input type="number" id="adjVenueScale" value="100" step="5">
+        <input type="number" id="adjVenueDx" value="0" step="1">
+        <input type="number" id="adjVenueDy" value="0" step="1">
+        <input type="checkbox" id="adjVenueHidden">
+
+        <label for="adjSaleTagScale">セールタグバッジ（オンライン販売用）</label>
+        <input type="number" id="adjSaleTagScale" value="100" step="5">
+        <input type="number" id="adjSaleTagDx" value="0" step="1">
+        <input type="number" id="adjSaleTagDy" value="0" step="1">
+        <input type="checkbox" id="adjSaleTagHidden">
       </div>
-      <p class="hint">会期情報の位置調整について: ③④①⑤（フレーム型/スポットライト型/切り抜き型/サイバーUI型）は会場名・価格と1本の行にまとめて表示される仕様のため、位置調整はその行全体を動かします（会場名・価格も一緒に動きます）。②（縦書きタイトル型）と情報帯型は日付だけを独立して動かせます。</p>
+      <p class="hint">オンライン販売用のバッジについて: 「セールタグバッジ」欄はアート作品 オンライン販売中などのバッジ、「価格バッジ」欄は価格・エディション情報バッジの位置調整に使います（どちらもバナー用途を「オンライン販売用」にした時だけ表示されます。「会期情報」欄は販売終了日の表示があれば、そちらの位置調整に引き続き使えます）。</p>
       <div style="display:flex; gap:8px; margin-top:8px;">
         <button type="button" id="undoAdjustmentsBtn" title="元に戻す（Ctrl+Z）">↶ 元に戻す</button>
         <button type="button" id="redoAdjustmentsBtn" title="やり直す（Ctrl+Shift+Z）">↷ やり直す</button>
@@ -862,7 +900,7 @@
 
     <fieldset>
       <legend>レイヤー分け出力</legend>
-      <p class="hint">背景・原画・装飾・テキストの4レイヤーに分けて書き出します。原画を差し替えたり、テキストだけ言語別に調整したりする編集作業に使えます。</p>
+      <p class="hint">背景・素材・装飾・テキストの4レイヤーに分けて書き出します。素材を差し替えたり、テキストだけ言語別に調整したりする編集作業に使えます。</p>
       <button type="button" id="downloadLayersZipBtn">レイヤー別PNGをZIPでダウンロード</button>
       <button type="button" id="downloadPsdBtn" style="margin-top:8px;">PSD形式でダウンロード（レイヤー分け）</button>
       <p class="hint" id="layerExportStatus" style="display:none;"></p>
@@ -879,6 +917,8 @@
         <div class="resize-handle handle-sw" data-corner="sw"></div>
         <div class="resize-handle handle-se" data-corner="se"></div>
       </div>
+      <div id="centerGuideV" class="center-guide vertical"></div>
+      <div id="centerGuideH" class="center-guide horizontal"></div>
     </div>
   </div>
 
@@ -914,6 +954,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=59"></script>
+<script src="app.js?v=75"></script>
 </body>
 </html>

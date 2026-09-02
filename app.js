@@ -151,13 +151,13 @@ function classifyTemplateFromPalette(bg, accent, accentRaw) {
   // モノトーン・和紙質感・墨系 → 縦書きタイトル型
   // (even the most vivid secondary color in the artwork is barely saturated)
   if (rawHsl.s < 0.15) return 'vertical2';
-  // 暗色・重厚 → スポットライト額装型（色相を問わずドラマチックな方が合う）
+  // 暗色・重厚 → スポットライト型（色相を問わずドラマチックな方が合う）
   if (bgHsl.l < 0.32) return 'frame4';
   // 暖色系・彩度高め・ポップ → キャラクター切り抜き型
   if (isWarmHue && bgHsl.l > 0.55) return 'cutout1';
   // 寒色・デジタル感 → サイバーUI型
   if (isCoolHue) return 'cyberui5';
-  // 特に指定なし・汎用 → 壁掛けフレーム型（デフォルト）
+  // 特に指定なし・汎用 → ギャラリー型（デフォルト）
   return 'frame3';
 }
 
@@ -231,6 +231,24 @@ function formatBannerDate(isoDate, lang) {
   return `${md} (${weekday})`;
 }
 
+// Wraps an already-formatted date (formatBannerDate's output) with a
+// "until <date>" phrase per language, for the single deadline-style date
+// online-sale banners show (no start date — see buildInfoLineParts). A
+// bare "08.24 (Mon)" doesn't say what the date IS; this makes the sale
+// end date read the same way regardless of language. Only applied to the
+// auto-formatted date — a free-text dateOverride is used as-is verbatim.
+const SALE_DEADLINE_PREFIX = {
+  ja: '', en: 'Until ', 'zh-Hans': '至', 'zh-Hant': '至', fr: "Jusqu'au ",
+  ar: 'حتى ', es: 'Hasta ', pt: 'Até ', de: 'Bis ', it: 'Fino al '
+};
+const SALE_DEADLINE_SUFFIX = { ja: 'まで' };
+function formatSaleDeadline(dateLabel, lang) {
+  if (!dateLabel) return '';
+  const prefix = SALE_DEADLINE_PREFIX[lang] ?? SALE_DEADLINE_PREFIX.en;
+  const suffix = SALE_DEADLINE_SUFFIX[lang] ?? '';
+  return `${prefix}${dateLabel}${suffix}`;
+}
+
 // ---------- App state ----------
 
 // Languages the venue/date/copyright master never has per-language text for
@@ -270,12 +288,17 @@ const state = {
   // renders in — a project-wide design choice like the template/colors, not
   // per-language content, so it isn't part of state.drafts.
   titleFont: 'gothic',
+  // "1行に収める" toggles — force a single shrink-to-fit line instead of
+  // auto-wrapping to 2 lines. Project-wide formatting choices like
+  // titleFont, not per-language content, so not part of state.drafts.
+  titleNoWrap: false,
+  mainCopyNoWrap: false,
   // 'venue' = 来場促進(集客用), 'sale' = オンライン販売用
   bannerPurpose: 'venue',
   googleAccessToken: null,
   // Which field groups vary per language vs. stay shared across all
   // languages — see LANG_FIELD_GROUPS below. Default: all per-language.
-  langSpecific: { title: true, mainCopy: true, subCopy: true, copyright: true, extraText: true },
+  langSpecific: { title: true, mainCopy: true, subCopy: true, copyright: true, extraText: true, saleTag: true },
   // per-language text, one key per LANG_FIELD_GROUPS field currently
   // toggled on: { [lang]: { title, dateStart, dateEnd, venue, mainCopy, subCopy, copyright } }
   drafts: {},
@@ -306,7 +329,17 @@ const state = {
     subCopy: { scale: 100, dx: 0, dy: 0, hidden: false },
     art: { scale: 100, dx: 0, dy: 0, hidden: false },
     dates: { scale: 100, dx: 0, dy: 0, hidden: false },
-    extraText: { scale: 100, dx: 0, dy: 0, hidden: false }
+    extraText: { scale: 100, dx: 0, dy: 0, hidden: false },
+    // Only ever populated in sale mode, by the price pill (see
+    // drawSaleBadges) — plain venue-name text has never been individually
+    // adjustable and still isn't. Named after the 'venue' layer it shares,
+    // same precedent as 'logo' sharing the 'decoration' layer.
+    venue: { scale: 100, dx: 0, dy: 0, hidden: false },
+    // Sale-tag pill (see drawSaleBadges). Kept separate from 'dates' —
+    // once end dates became optional-but-showable again in sale mode, the
+    // venue/date info line and the sale-tag pill can appear at the same
+    // time, so they need independent drag boxes and hide toggles.
+    saleTag: { scale: 100, dx: 0, dy: 0, hidden: false }
   }
 };
 
@@ -326,8 +359,9 @@ function adj(key) {
 state.elementBounds = {};
 const ADJUSTMENT_LABELS = {
   logo: 'ロゴ', copyright: 'コピーライト', title: 'タイトル',
-  mainCopy: 'メインコピー', subCopy: 'サブコピー', art: '原画', dates: '会期情報',
-  extraText: '追加テキスト'
+  mainCopy: 'メインコピー', subCopy: 'サブコピー', art: '素材', dates: '会期情報',
+  extraText: '追加テキスト', venue: '価格バッジ（オンライン販売用）',
+  saleTag: 'セールタグバッジ（オンライン販売用）'
 };
 function recordBounds(key, x, y, w, h) {
   state.elementBounds[key] = { x, y, w, h };
@@ -352,10 +386,11 @@ const realCtx = canvas.getContext('2d'); // the true composite surface — what'
 // Text is split one layer per input field (matching the "テキスト項目" panel)
 // rather than one combined "text" layer, so each piece of copy can be
 // hidden/edited/translated independently once opened in Photoshop.
-const LAYER_ORDER = ['background', 'artwork', 'decoration', 'title', 'dates', 'venue', 'mainCopy', 'subCopy', 'copyright', 'extraText'];
+const LAYER_ORDER = ['background', 'artwork', 'decoration', 'title', 'dates', 'venue', 'saleTag', 'mainCopy', 'subCopy', 'copyright', 'extraText'];
 const LAYER_LABELS = {
-  background: '背景', artwork: '原画', decoration: '装飾',
+  background: '背景', artwork: '素材', decoration: '装飾',
   title: '展示会タイトル', dates: '会期情報', venue: '開催会場名',
+  saleTag: 'セールタグバッジ',
   mainCopy: 'メインコピー', subCopy: 'サブコピー', copyright: 'コピーライト',
   extraText: '追加テキスト'
 };
@@ -389,7 +424,7 @@ function useLayer(name) {
 // draw sites instead.
 const LAYER_TO_ADJUSTMENT = {
   title: 'title', dates: 'dates', mainCopy: 'mainCopy', subCopy: 'subCopy',
-  copyright: 'copyright', artwork: 'art', extraText: 'extraText'
+  copyright: 'copyright', artwork: 'art', extraText: 'extraText', saleTag: 'saleTag'
 };
 
 function compositeLayers() {
@@ -420,6 +455,8 @@ const els = {
   resetColors: document.getElementById('resetColorsBtn'),
   title: document.getElementById('titleField'),
   titleFontSelect: document.getElementById('titleFontSelect'),
+  titleNoWrapToggle: document.getElementById('titleNoWrapToggle'),
+  mainCopyNoWrapToggle: document.getElementById('mainCopyNoWrapToggle'),
   dateStart: document.getElementById('dateStart'),
   dateEnd: document.getElementById('dateEnd'),
   dateOverride: document.getElementById('dateOverrideField'),
@@ -430,8 +467,16 @@ const els = {
   extraText: document.getElementById('extraTextField'),
   priceField: document.getElementById('priceField'),
   priceFieldLabel: document.getElementById('priceFieldLabel'),
+  priceFieldHint: document.getElementById('priceFieldHint'),
+  saleTag: document.getElementById('saleTagField'),
+  saleTagFieldLabel: document.getElementById('saleTagFieldLabel'),
+  saleTagHint: document.getElementById('saleTagHint'),
   dateFieldLabel: document.getElementById('dateFieldLabel'),
+  dateFieldHint: document.getElementById('dateFieldHint'),
+  dateStartWrap: document.getElementById('dateStartWrap'),
   venueFieldLabel: document.getElementById('venueFieldLabel'),
+  venueFieldHint: document.getElementById('venueFieldHint'),
+  sessionMasterFieldset: document.getElementById('sessionMasterFieldset'),
   subCopyFieldLabel: document.getElementById('subCopyFieldLabel'),
   bannerPurposeSelect: document.getElementById('bannerPurposeSelect'),
   bannerPurposeHint: document.getElementById('bannerPurposeHint'),
@@ -464,6 +509,7 @@ const els = {
   langToggle_subCopy: document.getElementById('langToggle_subCopy'),
   langToggle_copyright: document.getElementById('langToggle_copyright'),
   langToggle_extraText: document.getElementById('langToggle_extraText'),
+  langToggle_saleTag: document.getElementById('langToggle_saleTag'),
   templateSelect: document.getElementById('templateSelect'),
   autoTemplateCheckbox: document.getElementById('autoTemplateCheckbox'),
   sessionChecklist: document.getElementById('sessionChecklist'),
@@ -495,7 +541,9 @@ const els = {
   saveAdjustPresetBtn: document.getElementById('saveAdjustPresetBtn'),
   adjustPresetStatus: document.getElementById('adjustPresetStatus'),
   adjustHighlight: document.getElementById('adjustHighlight'),
-  adjustHighlightLabel: document.getElementById('adjustHighlightLabel')
+  adjustHighlightLabel: document.getElementById('adjustHighlightLabel'),
+  centerGuideV: document.getElementById('centerGuideV'),
+  centerGuideH: document.getElementById('centerGuideH')
 };
 
 function syncColorPickers() {
@@ -513,36 +561,67 @@ function syncColorPickers() {
 
 function applyBannerPurposeUI() {
   const isSale = state.bannerPurpose === 'sale';
-  els.venueFieldLabel.textContent = isSale ? '販売サイト名（例: GAAAT ONLINE STORE）' : '開催会場名';
-  els.dateFieldLabel.textContent = isSale ? '販売期間（開始日・終了日）※任意' : '会期情報（開始日・終了日）';
-  els.subCopyFieldLabel.textContent = isSale ? 'CTA文言（例: ONLINE STORE／予約受付中）' : 'サブコピー（帯・2行目）';
+  // Sale banners don't use a venue/site name (GAAAT's actual EC banners
+  // never show one, and it's not something marketing asked to keep) — the
+  // whole field is hidden rather than relabeled.
+  els.venueFieldLabel.style.display = isSale ? 'none' : '';
+  els.venue.style.display = isSale ? 'none' : '';
+  els.venueFieldHint.style.display = isSale ? 'none' : '';
+  // The whole 案件マスタ (session master) paste-in workflow — venue/date
+  // pulled per exhibition city/session — doesn't apply to online-sale
+  // banners, which aren't created per session at all.
+  els.sessionMasterFieldset.style.display = isSale ? 'none' : '';
+  // subCopy keeps its normal label/role in both purposes — sale mode has
+  // its own dedicated saleTag badge instead of repurposing subCopy as a CTA.
+  els.subCopyFieldLabel.textContent = 'サブコピー（帯・2行目）';
   els.bannerPurposeHint.textContent = isSale
-    ? 'ECサイト等に貼る購入導線用のバナーです。会場名欄は販売サイト名、会期欄は販売期間として使えます（どちらも任意）。価格・オファー文言も追加できます。'
+    ? 'ECサイト等に貼る購入導線用のバナーです。メインコピー・サブコピーはそのまま使えます。販売期間・価格は任意項目です（誤解を避けるため、金額は自動で入りません — 実際の額を確認できた時だけ入力してください）。'
     : '会場名・会期情報を軸に来場を促すバナーです。';
+
+  // Sale mode only ever needs a single, optional deadline-style date (a
+  // "start date" doesn't mean much for an ongoing online sale) — the start
+  // date input is hidden entirely rather than just relabeled, so nobody
+  // mistakes it for a required field.
+  els.dateFieldLabel.textContent = isSale ? '販売終了日（任意）' : '会期情報（開始日・終了日）';
+  els.dateFieldHint.textContent = isSale
+    ? '日付・曜日の表示形式は選択中の言語に合わせて自動で変わります。オンライン販売用は「販売期間もあったりなかったり」なので任意項目です — 空欄なら何も表示されません。'
+    : '日付・曜日の表示形式は選択中の言語に合わせて自動で変わります（例: 08.21 (Fri.) / 08.21（金））。案件マスタの会場を選ぶと自動反映されます（全言語共通）。';
+  els.dateStartWrap.style.display = isSale ? 'none' : '';
+
   els.priceFieldLabel.style.display = isSale ? '' : 'none';
   els.priceField.style.display = isSale ? '' : 'none';
+  els.priceFieldHint.style.display = isSale ? '' : 'none';
+  els.saleTagFieldLabel.closest('.field-label-row').style.display = isSale ? '' : 'none';
+  els.saleTag.style.display = isSale ? '' : 'none';
+  els.saleTagHint.style.display = isSale ? '' : 'none';
 }
 
-// Builds the venue/date(/price) summary line shared by most templates.
-// Each template joins these parts with whatever separator matches its own
-// typography; this just decides WHAT goes in, not how it's drawn.
-// Returns [{text, layer}] instead of plain strings — each part remembers
-// which input field (and so which export layer) it came from, so the
-// shared drawInfoLine() below can render venue/dates/price as one visual
-// line while still landing each piece on its own layer. Price has no
-// layer of its own (it isn't one of the six 展示会 fields) and folds into
-// 'venue', matching how it's already appended to the venue text elsewhere.
+// Builds the venue/date summary line shared by most templates. Each
+// template joins these parts with whatever separator matches its own
+// typography; this just decides WHAT goes in, not how it's drawn. Returns
+// [{text, layer}] instead of plain strings — each part remembers which
+// input field (and so which export layer) it came from, so the shared
+// drawInfoLine() below can render venue/dates as one visual line while
+// still landing each piece on its own layer.
+//
+// Price is NOT included here — in sale mode it gets its own pill via
+// drawSaleBadges() below rather than folding into this muted text line,
+// so it reads as prominently as it does on GAAAT's actual EC banners.
 function buildInfoLineParts() {
   const dateOverrideText = els.dateOverride.value.trim();
-  const dateStartLabel = formatBannerDate(els.dateStart.value, state.currentLang);
   const dateEndLabel = formatBannerDate(els.dateEnd.value, state.currentLang);
-  const dateRange = dateOverrideText || [dateStartLabel, dateEndLabel].filter(Boolean).join(' – ');
-  const parts = [];
-  if (els.venue.value.trim()) parts.push({ text: els.venue.value.trim(), layer: 'venue' });
-  if (dateRange) parts.push({ text: dateRange, layer: 'dates' });
-  if (state.bannerPurpose === 'sale' && els.priceField.value.trim()) {
-    parts.push({ text: els.priceField.value.trim(), layer: 'venue' });
+  let dateRange;
+  if (state.bannerPurpose === 'sale') {
+    // Sale mode never shows a start date — an ongoing online sale usually
+    // just has a (possibly absent) deadline, not a "始まる日".
+    dateRange = dateOverrideText || formatSaleDeadline(dateEndLabel, state.currentLang);
+  } else {
+    const dateStartLabel = formatBannerDate(els.dateStart.value, state.currentLang);
+    dateRange = dateOverrideText || [dateStartLabel, dateEndLabel].filter(Boolean).join(' – ');
   }
+  const parts = [];
+  if (state.bannerPurpose !== 'sale' && els.venue.value.trim()) parts.push({ text: els.venue.value.trim(), layer: 'venue' });
+  if (dateRange) parts.push({ text: dateRange, layer: 'dates' });
   return parts;
 }
 
@@ -605,6 +684,120 @@ function drawInfoLine(parts, x, y, font, color, align, separator, alpha = 1, max
 // still reads as one even before any copy is written.
 function saleCtaFallback() {
   return state.bannerPurpose === 'sale' ? 'ONLINE STORE' : '';
+}
+
+// ---------- Sale badges (price pill + "アート作品 オンライン販売中" pill) ----------
+// Modeled on GAAAT's actual EC banners (見本: R220/R256), which pair a
+// colored "what this is" tag with a white price pill instead of burying
+// either in a muted info line. saleTag is a dedicated free-text field —
+// deliberately separate from subCopy, which keeps its one job (a secondary
+// copy line) across both banner purposes instead of double-duty as a CTA.
+// Both this and price are fully optional — neither auto-fills, so nothing
+// shows unless someone actually typed it in.
+function saleTagText() {
+  return els.saleTag.value.trim();
+}
+function priceTagText() {
+  return state.bannerPurpose === 'sale' ? els.priceField.value.trim() : '';
+}
+
+// Draws one rounded pill (filled background + single-line text) at `x,y`
+// (y = top edge) and returns its box, so callers can stack several pills
+// without measuring text twice. `opts.hidden` still computes and returns
+// the box (so recordBounds/layout stay stable and the element remains
+// grabbable in the adjustment panel) but skips the actual painting — same
+// hide semantics as every other adjustable element (see logoAdj.hidden).
+function drawPill(x, y, text, opts) {
+  const { font, bg, fg, align = 'left', hidden = false } = opts;
+  ctx.font = font;
+  const sizeMatch = font.match(/(\d+(?:\.\d+)?)px/);
+  const fontPx = sizeMatch ? parseFloat(sizeMatch[1]) : 20;
+  const padX = opts.padX ?? fontPx * 0.7;
+  const padY = opts.padY ?? fontPx * 0.42;
+  const textW = ctx.measureText(text).width;
+  const w = textW + padX * 2, h = fontPx + padY * 2;
+  let left;
+  if (align === 'center') left = x - w / 2;
+  else if (align === 'right') left = x - w;
+  else left = x;
+  if (hidden) return { x: left, y, w, h };
+  ctx.fillStyle = bg;
+  roundRect(ctx, left, y, w, h, h / 2);
+  ctx.fill();
+  ctx.fillStyle = fg;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, left + padX, y + h / 2 + fontPx * 0.03);
+  ctx.textBaseline = 'alphabetic';
+  return { x: left, y, w, h };
+}
+
+// Draws the sale-tag pill (accent bg, 'saleTag' category/layer) and price
+// pill (white bg, 'venue' category/layer) stacked vertically, and returns
+// the total height consumed (0 if both fields are empty). Kept on separate
+// categories from 'dates' — the venue/date info line still renders
+// independently in sale mode (a deadline-style end date is optional but
+// showable), so it needs its own drag box and hide toggle, distinct from
+// this pair. `anchorY` is the pair's bottom edge by default (anchor=
+// 'bottom', stacks upward — for templates that lay out bottom-up); pass
+// anchor='top' for templates building their layout top-down (anchorY is
+// then the pair's top edge, tag pill first, price pill below it).
+function drawSaleBadges(x, anchorY, align, accentHex, fgHex = '#ffffff', baseSize = 22, anchor = 'bottom') {
+  if (state.bannerPurpose !== 'sale') return 0;
+  const tagText = saleTagText();
+  const priceText = priceTagText();
+  if (!tagText && !priceText) return 0;
+
+  const tagAdj = adj('saleTag');
+  const venueAdj = adj('venue');
+
+  if (anchor === 'top') {
+    let cursorTop = anchorY;
+    let bottom = anchorY;
+    if (tagText) {
+      useLayer('saleTag');
+      const tagSize = baseSize * tagAdj.scale / 100;
+      const pill = drawPill(x + tagAdj.dx, cursorTop + tagAdj.dy, tagText, {
+        font: `700 ${tagSize}px ${FONT_STACK}`, bg: accentHex, fg: fgHex, align, hidden: tagAdj.hidden
+      });
+      recordBounds('saleTag', pill.x, pill.y, pill.w, pill.h);
+      cursorTop = pill.y + pill.h + 10 - tagAdj.dy;
+      bottom = pill.y + pill.h;
+    }
+    if (priceText) {
+      useLayer('venue');
+      const priceSize = baseSize * venueAdj.scale / 100;
+      const pill = drawPill(x + venueAdj.dx, cursorTop + venueAdj.dy, priceText, {
+        font: `700 ${priceSize}px ${FONT_STACK}`, bg: '#ffffff', fg: '#16171a', align, hidden: venueAdj.hidden
+      });
+      recordBounds('venue', pill.x, pill.y, pill.w, pill.h);
+      bottom = pill.y + pill.h;
+    }
+    return bottom - anchorY;
+  }
+
+  let cursorBottom = anchorY;
+  let top = anchorY;
+  if (priceText) {
+    useLayer('venue');
+    const priceSize = baseSize * venueAdj.scale / 100;
+    const pill = drawPill(x + venueAdj.dx, cursorBottom - (priceSize + priceSize * 0.42 * 2) + venueAdj.dy, priceText, {
+      font: `700 ${priceSize}px ${FONT_STACK}`, bg: '#ffffff', fg: '#16171a', align, hidden: venueAdj.hidden
+    });
+    recordBounds('venue', pill.x, pill.y, pill.w, pill.h);
+    cursorBottom = pill.y - 10 - venueAdj.dy;
+    top = pill.y;
+  }
+  if (tagText) {
+    useLayer('saleTag');
+    const tagSize = baseSize * tagAdj.scale / 100;
+    const pill = drawPill(x + tagAdj.dx, cursorBottom - (tagSize + tagSize * 0.42 * 2) + tagAdj.dy, tagText, {
+      font: `700 ${tagSize}px ${FONT_STACK}`, bg: accentHex, fg: fgHex, align, hidden: tagAdj.hidden
+    });
+    recordBounds('saleTag', pill.x, pill.y, pill.w, pill.h);
+    top = pill.y;
+  }
+  return anchorY - top;
 }
 
 // ---------- Drawing helpers ----------
@@ -774,7 +967,7 @@ function wrapText(text, maxWidth, font) {
   return lines;
 }
 
-// zoom/panX/panY implement the 原画のトリミング・位置 (art crop/position)
+// zoom/panX/panY implement the 素材のトリミング・位置 (art crop/position)
 // adjustment knob — zoom > 1 crops in tighter (shows less of the source,
 // magnified); panX/panY are in *destination* px (same units as every other
 // dx/dy adjustment) and shift which part of the source shows through the
@@ -924,7 +1117,7 @@ function renderCurrentLayout() {
     // headline rather than flat body text, matching the more graphic
     // treatment the other templates already have.
     const isCjkTitle = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
-    const titleFit = fitFontSizeWrap(lines[0].toUpperCase(), titleMaxW, 700, TITLE_FONT_STACK, 136, 64, 1, 2, isCjkTitle);
+    const titleFit = fitFontSizeWrap(lines[0].toUpperCase(), titleMaxW, 700, TITLE_FONT_STACK, 136, state.titleNoWrap ? 14 : 64, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
     const size = titleFit.size * titleAdj.scale / 100;
     const titleLineH = size * 1.05;
     cursorY += size * 0.78;
@@ -1001,7 +1194,7 @@ function renderCurrentLayout() {
     ctx.font = `400 20px ${FONT_STACK}`;
     ctx.textAlign = 'center';
     ctx.globalAlpha = 0.6;
-    ctx.fillText('キャラクター原画をアップロード', artLeft + (W - artLeft) / 2, artTop + (artBottom - artTop) / 2);
+    ctx.fillText('素材をアップロード', artLeft + (W - artLeft) / 2, artTop + (artBottom - artTop) / 2);
     ctx.restore();
   }
 
@@ -1009,31 +1202,61 @@ function renderCurrentLayout() {
   const colW = colRight - colLeft;
 
   useLayer('decoration');
-  // Logo (bottom anchored, just above band)
+  // Logo (bottom anchored, just above band). logoBottomY — used below to
+  // place venue/dates — is derived from a FIXED base height, not the
+  // logo's own (possibly manually scaled) height, so resizing the logo
+  // stays isolated to the logo itself instead of shifting where venue/
+  // dates sit. Every other per-element adjustment already works this way
+  // (its own box only); this just closes the one place logo's scale used
+  // to leak into a different element's position.
   const logoAdj = adj('logo');
-  let logoBottomY = bandTop - 30;
-  const tinted = tintedLogo(textHex, 40 * logoAdj.scale / 100);
+  const logoAnchorY = bandTop - 30;
+  const logoBaseH = 40;
+  const logoBottomY = logoAnchorY - logoBaseH;
+  const tinted = tintedLogo(textHex, logoBaseH * logoAdj.scale / 100);
   if (tinted) {
-    if (!logoAdj.hidden) ctx.drawImage(tinted.canvas, colLeft + logoAdj.dx, logoBottomY - tinted.h + logoAdj.dy, tinted.w, tinted.h);
-    recordBounds('logo', colLeft + logoAdj.dx, logoBottomY - tinted.h + logoAdj.dy, tinted.w, tinted.h);
-    logoBottomY = logoBottomY - tinted.h;
-  } else {
-    logoBottomY -= 40;
+    const logoY = logoAnchorY - tinted.h + logoAdj.dy;
+    if (!logoAdj.hidden) ctx.drawImage(tinted.canvas, colLeft + logoAdj.dx, logoY, tinted.w, tinted.h);
+    recordBounds('logo', colLeft + logoAdj.dx, logoY, tinted.w, tinted.h);
   }
 
-  // Venue (doubles as store name in sale mode; price/offer appended inline
-  // so it shares the existing fit-to-width sizing rather than needing its
-  // own layout slot)
+  // Venue — not shown at all in sale mode (see applyBannerPurposeUI)
   useLayer('venue');
-  const priceText = (state.bannerPurpose === 'sale' && els.priceField.value.trim()) ? els.priceField.value.trim() : '';
-  const venueText = priceText ? `${els.venue.value}　${priceText}` : els.venue.value;
+  const venueText = state.bannerPurpose === 'sale' ? '' : els.venue.value;
   const venueFit = fitFontSizeTruncate(venueText, colW, 700, FONT_STACK, 34, 22, 0.5);
   const venueBaseline = logoBottomY - 22;
-  ctx.font = `700 ${venueFit.size}px ${FONT_STACK}`;
-  ctx.fillStyle = rgbToHex(accent);
-  ctx.textAlign = 'left';
-  ctx.fillText(venueFit.text, colLeft, venueBaseline);
+  if (venueText) {
+    ctx.font = `700 ${venueFit.size}px ${FONT_STACK}`;
+    ctx.fillStyle = rgbToHex(accent);
+    ctx.textAlign = 'left';
+    ctx.fillText(venueFit.text, colLeft, venueBaseline);
+  }
 
+  if (state.bannerPurpose === 'sale') {
+    // Online sale banners only ever need a single, optional deadline-style
+    // date (no "start date"), sitting directly above the logo — venue never
+    // draws in this mode, so the date takes over its slot rather than
+    // floating in a gap left by the empty venue line above it.
+    useLayer('dates');
+    const datesAdj = adj('dates');
+    const saleDateText = els.dateOverride.value.trim() || formatSaleDeadline(formatBannerDate(els.dateEnd.value, state.currentLang), state.currentLang);
+    if (saleDateText) {
+      // Fit at the BASE size first, then apply .scale as a plain
+      // multiplier afterward (like title does) — feeding scale into the
+      // fit search's startSize instead just gets shrunk straight back
+      // down to whatever already fits, so dragging the resize handle
+      // bigger has no visible effect past that point.
+      const dateFit = fitFontSizeTruncate(saleDateText, colW, 800, FONT_STACK, 32, 20, 0);
+      const dateSize = dateFit.size * datesAdj.scale / 100;
+      ctx.font = `800 ${dateSize}px ${FONT_STACK}`;
+      const dateBaseline = logoBottomY - 22 + datesAdj.dy;
+      const dateW = ctx.measureText(dateFit.text).width;
+      ctx.fillStyle = textHex;
+      ctx.textAlign = 'left';
+      ctx.fillText(dateFit.text, colLeft + datesAdj.dx, dateBaseline);
+      recordBounds('dates', colLeft + datesAdj.dx, dateBaseline - dateSize * 0.8, dateW, dateSize);
+    }
+  } else {
   useLayer('dates');
   // Dates — formatted for the currently selected language/locale, or the
   // free-text override if the user typed one (for runs a start/end date
@@ -1053,14 +1276,19 @@ function renderCurrentLayout() {
     // (Weekday)"), free-text override can be any length the user types —
     // found by testing a long one that ran straight off the canvas and
     // under the artwork with no shrink/truncate safety net at all.
-    const overrideFit = fitFontSizeTruncate(dateOverrideText, colW, 800, FONT_STACK, dateSize, 24, 0);
-    ctx.font = `800 ${overrideFit.size}px ${FONT_STACK}`;
+    // Fit at the BASE size first, then apply .scale afterward — see the
+    // sale-mode date branch above for why (feeding scale into the fit
+    // search's startSize caps out silently once the natural fit is
+    // smaller than the scaled request).
+    const overrideFit = fitFontSizeTruncate(dateOverrideText, colW, 800, FONT_STACK, 58, 24, 0);
+    const overrideSize = overrideFit.size * datesAdj.scale / 100;
+    ctx.font = `800 ${overrideSize}px ${FONT_STACK}`;
     const overrideBaseline = venueBaseline - 52 + datesAdj.dy;
     const overrideW = ctx.measureText(overrideFit.text).width;
     ctx.fillStyle = textHex;
     ctx.textAlign = 'left';
     ctx.fillText(overrideFit.text, colLeft + datesAdj.dx, overrideBaseline);
-    recordBounds('dates', colLeft + datesAdj.dx, overrideBaseline - overrideFit.size * 0.8, overrideW, overrideFit.size);
+    recordBounds('dates', colLeft + datesAdj.dx, overrideBaseline - overrideSize * 0.8, overrideW, overrideSize);
   } else {
     const startW = ctx.measureText(dateStartLabel).width;
     const endW = ctx.measureText(dateEndLabel).width;
@@ -1097,6 +1325,7 @@ function renderCurrentLayout() {
 
     recordBounds('dates', colLeft + datesAdj.dx, datesTop, dateBlockW, dateEndBaseline - datesTop);
   }
+  }
 
   // ---- Bottom band text ----
   const bandTextX = MARGIN;
@@ -1107,12 +1336,23 @@ function renderCurrentLayout() {
   const subCopy = els.subCopy.value;
   const mainCopyAdj = adj('mainCopy');
   const subCopyAdj = adj('subCopy');
-  const mainFont = `800 ${Math.round(42 * mainCopyAdj.scale / 100)}px ${FONT_STACK}`;
+  let mainFont = `800 ${Math.round(42 * mainCopyAdj.scale / 100)}px ${FONT_STACK}`;
   const subFont = `400 ${Math.round(28 * subCopyAdj.scale / 100)}px ${FONT_STACK}`;
 
   const bandTextMaxW = W - bandTextX - MARGIN - 60;
-  ctx.font = mainFont;
-  const mainLines = wrapText(mainCopy, bandTextMaxW, mainFont);
+  let mainLines;
+  if (state.mainCopyNoWrap) {
+    // Fit at the BASE size first, then apply .scale as a plain multiplier
+    // afterward (like title does) rather than feeding it into the fit
+    // search — otherwise dragging bigger just gets shrunk straight back
+    // down to whatever already fits, and the drag has no visible effect.
+    const fit = fitFontSizeTruncate(mainCopy, bandTextMaxW, 800, FONT_STACK, 42, 10, 0);
+    mainFont = `800 ${fit.size * mainCopyAdj.scale / 100}px ${FONT_STACK}`;
+    mainLines = [fit.text];
+  } else {
+    ctx.font = mainFont;
+    mainLines = wrapText(mainCopy, bandTextMaxW, mainFont);
+  }
   ctx.font = subFont;
   const subLines = subCopy ? wrapText(subCopy, bandTextMaxW, subFont) : [];
 
@@ -1153,6 +1393,15 @@ function renderCurrentLayout() {
     ctx.fillText(els.copyright.value, crX, crY);
     recordBounds('copyright', crX - crW, crY - crSize * 0.8, crW, crSize);
     ctx.restore();
+  }
+
+  // Sale-tag + price pills, bottom-right of the band, above copyright —
+  // reads like a corner CTA button rather than competing with the
+  // メインコピー/サブコピー copy on the band's left side. White pill
+  // background (with accent-colored tag text) so it stays legible
+  // regardless of how saturated the extracted accent color is.
+  if (state.bannerPurpose === 'sale') {
+    drawSaleBadges(W - MARGIN, W - 58, 'right', '#ffffff', rgbToHex(accent), 22);
   }
 
   useLayer('extraText');
@@ -1198,115 +1447,35 @@ function roundRect(c, x, y, w, h, r) {
   c.closePath();
 }
 
-// Draws a framed-artwork mockup (drop shadow, frame, accent fillet, mat,
-// artwork, glass reflection, bevel) inside `outer` ({x,y,w,h}) and returns
-// the inner art rect. Shared by template③ (gallery wall) and template④
-// (spotlight) — both display the artwork the same physical way, only the
-// surrounding background/typography differs.
-function drawPictureFrame(outer, accentHex) {
-  // mat
-  const frameBorder = 26;
-  const mat = {
-    x: outer.x + frameBorder, y: outer.y + frameBorder,
-    w: outer.w - 2 * frameBorder, h: outer.h - 2 * frameBorder
-  };
-
-  // artwork window inside the mat
-  const matBorder = 48;
-  const art = {
-    x: mat.x + matBorder, y: mat.y + matBorder,
-    w: mat.w - 2 * matBorder, h: mat.h - 2 * matBorder
-  };
-
-  useLayer('decoration');
-
-  // drop shadow — filled as a ring (outer rect minus the art-window hole),
-  // not a solid rect: the art image is drawn separately on the 'artwork'
-  // layer canvas, which composites independently, so any solid fill
-  // reaching into that rect here would otherwise paint over it regardless
-  // of draw order. fill() (not clip()) so the blur still bleeds outward
-  // past the frame's outer edge as intended.
-  ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,0.35)';
-  ctx.shadowBlur = 40;
-  ctx.shadowOffsetY = 18;
-  ctx.fillStyle = '#000';
-  ctx.beginPath();
-  ctx.rect(outer.x, outer.y, outer.w, outer.h);
-  ctx.rect(art.x, art.y, art.w, art.h);
-  ctx.fill('evenodd');
-  ctx.restore();
-
-  // Outer frame, accent fillet, and mat — same ring treatment, this time
-  // clipped (they don't need to bleed past their own edges like the shadow).
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(outer.x, outer.y, outer.w, outer.h);
-  ctx.rect(art.x, art.y, art.w, art.h);
-  ctx.clip('evenodd');
-
-  // outer frame — neutral dark tone, like a real gallery frame
-  const frameColor = '#211f1d';
-  ctx.fillStyle = frameColor;
-  ctx.fillRect(outer.x, outer.y, outer.w, outer.h);
-
-  // thin accent fillet between frame and mat, for a touch of brand color
-  const filletT = 6;
-  ctx.fillStyle = accentHex;
-  ctx.fillRect(
-    outer.x + frameBorder - filletT, outer.y + frameBorder - filletT,
-    outer.w - 2 * (frameBorder - filletT), outer.h - 2 * (frameBorder - filletT)
-  );
-
-  ctx.fillStyle = '#f6f4ef';
-  ctx.fillRect(mat.x, mat.y, mat.w, mat.h);
-  ctx.restore();
-
+// Draws the artwork plain — cover-fit directly into `outer` ({x,y,w,h}),
+// no frame/mat/glass-reflection mockup. Shared by template③ (gallery
+// wall) and template④ (spotlight). Previously wrapped the artwork in a
+// framed-picture mockup (drop shadow, dark frame, accent fillet, mat,
+// glass reflection, bevel), but a rendered frame implies a specific
+// physical presentation — a particular frame color, matting, glazing —
+// that may not match how the piece is actually exhibited or sold. Dropped
+// per user feedback ("額装を勝手につけないでほしい"): showing artwork
+// plainly can't misrepresent its real framing, for either banner purpose.
+function drawArtworkPlain(outer) {
   useLayer('artwork');
   if (state.artImage) {
     const artAdj = adj('art');
-    drawCoverImage(state.artImage, art.x, art.y, art.w, art.h, artAdj.scale / 100, artAdj.dx, artAdj.dy);
-    recordBounds('art', art.x, art.y, art.w, art.h);
+    drawCoverImage(state.artImage, outer.x, outer.y, outer.w, outer.h, artAdj.scale / 100, artAdj.dx, artAdj.dy);
+    recordBounds('art', outer.x, outer.y, outer.w, outer.h);
   } else {
+    useLayer('decoration');
     ctx.save();
     ctx.strokeStyle = '#999';
     ctx.setLineDash([10, 8]);
     ctx.lineWidth = 2;
-    ctx.strokeRect(art.x + 2, art.y + 2, art.w - 4, art.h - 4);
+    ctx.strokeRect(outer.x + 2, outer.y + 2, outer.w - 4, outer.h - 4);
     ctx.fillStyle = '#999';
     ctx.font = `400 18px ${FONT_STACK}`;
     ctx.textAlign = 'center';
-    ctx.fillText('キャラクター原画をアップロード', art.x + art.w / 2, art.y + art.h / 2);
+    ctx.fillText('素材をアップロード', outer.x + outer.w / 2, outer.y + outer.h / 2);
     ctx.restore();
   }
-
-  // glass reflection — soft diagonal highlight over the artwork
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(art.x, art.y, art.w, art.h);
-  ctx.clip();
-  const gGrad = ctx.createLinearGradient(art.x, art.y, art.x + art.w * 0.5, art.y + art.h);
-  gGrad.addColorStop(0, 'rgba(255,255,255,0.22)');
-  gGrad.addColorStop(0.25, 'rgba(255,255,255,0.06)');
-  gGrad.addColorStop(0.5, 'rgba(255,255,255,0)');
-  ctx.fillStyle = gGrad;
-  ctx.beginPath();
-  ctx.moveTo(art.x, art.y);
-  ctx.lineTo(art.x + art.w * 0.55, art.y);
-  ctx.lineTo(art.x + art.w * 0.18, art.y + art.h);
-  ctx.lineTo(art.x, art.y + art.h);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-
-  // subtle inner bevel line — the glass edge
-  ctx.save();
-  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(art.x + 0.5, art.y + 0.5, art.w - 1, art.h - 1);
-  ctx.restore();
-
-  return art;
+  return outer;
 }
 
 // Computes a picture-frame rect ({x,y,w,h}) centered in the vertical band
@@ -1376,7 +1545,7 @@ function renderFrameTemplate() {
   const titleAdj = adj('title');
   if (headline) {
     const isCjkTitle = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
-    const headlineFit = fitFontSizeWrap(headline, W - 2 * 140, 700, TITLE_FONT_STACK, 64, 40, 1, 2, isCjkTitle);
+    const headlineFit = fitFontSizeWrap(headline, W - 2 * 140, 700, TITLE_FONT_STACK, 64, state.titleNoWrap ? 14 : 40, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
     const size = headlineFit.size * titleAdj.scale / 100;
     const lineH = size * 1.05;
     const yStart = MARGIN + 60;
@@ -1404,7 +1573,7 @@ function renderFrameTemplate() {
     headerBottom += 28;
   }
 
-  // venue / date(/price) line, muted, centered
+  // venue / date line, muted, centered
   const infoParts = buildInfoLineParts();
   if (infoParts.length) {
     const datesAdj = adj('dates');
@@ -1424,7 +1593,7 @@ function renderFrameTemplate() {
   // ---- Frame mockup, centered in the remaining space ----
   const frameTop = headerBottom + 34;
   const outer = computeFrameRect(frameTop, bottomBlockTop - 34, W - 2 * (MARGIN + 30));
-  const art = drawPictureFrame(outer, rgbToHex(accent));
+  const art = drawArtworkPlain(outer);
 
   // ---- Bottom row: CTA pill, right-aligned ----
   // Used to also repeat the title as a "work name" label on the left, but a
@@ -1436,8 +1605,13 @@ function renderFrameTemplate() {
   // pill now gets the full row width with its own guaranteed-fit sizing.
   const rowY = bottomBlockTop + bottomBlockH / 2;
 
+  // Same subCopy/mainCopy CTA pill regardless of banner purpose — the
+  // dedicated sale-tag/price pills (below, stacked above this one) are a
+  // separate element, not a replacement, so subCopy keeps working here
+  // exactly like it does in 集客 mode.
   const ctaSource = els.subCopy.value.trim() ? 'subCopy' : els.mainCopy.value.trim() ? 'mainCopy' : 'subCopy';
-  const ctaText = (els.subCopy.value || els.mainCopy.value || saleCtaFallback()).trim();
+  const ctaText = (els.subCopy.value || els.mainCopy.value).trim();
+  let ctaPillTop = rowY - 29;
   if (ctaText) {
     const ctaAdj = adj(ctaSource);
     const padX = 26, padY = 16;
@@ -1460,6 +1634,14 @@ function renderFrameTemplate() {
     ctx.fillText(ctaFit.text, pillX + padX, pillY + pillH / 2 + 1);
     ctx.textBaseline = 'alphabetic';
     recordBounds(ctaSource, pillX, pillY, pillW, pillH);
+    ctaPillTop = pillY;
+  }
+
+  // Sale-tag + price pills, bottom-right, stacked directly above the
+  // subCopy/mainCopy CTA pill — reads as a small CTA-button cluster in the
+  // corner rather than competing with the headline above.
+  if (state.bannerPurpose === 'sale') {
+    drawSaleBadges(W - MARGIN, ctaPillTop - 14, 'right', rgbToHex(accent), bandTextHex, 24);
   }
 
   useLayer('copyright');
@@ -1566,7 +1748,7 @@ function renderSpotlightFrameTemplate() {
   const titleAdj = adj('title');
   if (titleText) {
     const isCjkTitle = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
-    const titleFit = fitFontSizeWrap(titleText, W - 2 * 120, 700, TITLE_FONT_STACK, 116, 56, 1, 2, isCjkTitle);
+    const titleFit = fitFontSizeWrap(titleText, W - 2 * 120, 700, TITLE_FONT_STACK, 116, state.titleNoWrap ? 14 : 56, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
     const size = titleFit.size * titleAdj.scale / 100;
     const lineH = size * 1.05;
     const yStart = cursorY + size * 0.78;
@@ -1597,8 +1779,15 @@ function renderSpotlightFrameTemplate() {
   const subCopyText = els.mainCopy.value;
   if (subCopyText) {
     const mainCopyAdj = adj('mainCopy');
-    const font = `500 ${Math.round(30 * mainCopyAdj.scale / 100)}px ${FONT_STACK}`;
-    const subLines = wrapFn(subCopyText, W - 2 * 150, font).slice(0, 2);
+    let font = `500 ${Math.round(30 * mainCopyAdj.scale / 100)}px ${FONT_STACK}`;
+    let subLines;
+    if (state.mainCopyNoWrap) {
+      const fit = fitFontSizeTruncate(subCopyText, W - 2 * 150, 500, FONT_STACK, 30, 10, 0);
+      font = `500 ${fit.size * mainCopyAdj.scale / 100}px ${FONT_STACK}`;
+      subLines = [fit.text];
+    } else {
+      subLines = wrapFn(subCopyText, W - 2 * 150, font).slice(0, 2);
+    }
     ctx.font = font;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff';
@@ -1618,11 +1807,15 @@ function renderSpotlightFrameTemplate() {
 
   // ---- Frame mockup, centered in the remaining space ----
   const outer = computeFrameRect(cursorY + 20, bottomBlockTop - 20, W - 2 * (MARGIN + 40));
-  drawPictureFrame(outer, accentHex);
+  drawArtworkPlain(outer);
 
   const rowY = bottomBlockTop + 30;
+  // Same subCopy CTA text regardless of banner purpose — the dedicated
+  // sale-tag/price pills (below) are a separate element, not a
+  // replacement, so subCopy keeps working here exactly like it does in
+  // 集客 mode.
   useLayer('subCopy');
-  const ctaText = (els.subCopy.value || saleCtaFallback()).trim();
+  const ctaText = els.subCopy.value.trim();
   if (ctaText) {
     const subCopyAdj = adj('subCopy');
     const ctaFit = fitFontSizeTruncate(ctaText, W - 2 * MARGIN, 800, FONT_STACK, 40, 24, 0);
@@ -1645,6 +1838,13 @@ function renderSpotlightFrameTemplate() {
     const infoX = W / 2 + datesAdj.dx, infoY = rowY + 38 + datesAdj.dy;
     const infoW = drawInfoLine(infoParts, infoX, infoY, `500 ${infoSize}px ${FONT_STACK}`, '#fff', 'center', '   ／   ', 0.85, W - 2 * MARGIN);
     recordBounds('dates', infoX - infoW / 2, infoY - infoSize * 0.8, infoW, infoSize);
+  }
+
+  // Sale-tag + price pills, bottom corner (mirrored for RTL), above
+  // copyright — reads as a small CTA-button cluster in the corner.
+  if (state.bannerPurpose === 'sale') {
+    const badgeX = isRtl ? MARGIN : W - MARGIN;
+    drawSaleBadges(badgeX, W - MARGIN - 30, isRtl ? 'left' : 'right', accentHex, '#fff', 24);
   }
 
   useLayer('copyright');
@@ -1759,7 +1959,7 @@ function renderCutoutTemplate() {
     ctx.font = `400 20px ${FONT_STACK}`;
     ctx.textAlign = 'center';
     ctx.globalAlpha = 0.6;
-    ctx.fillText('キャラクター原画をアップロード', 0, 0);
+    ctx.fillText('素材をアップロード', 0, 0);
     ctx.restore();
   }
 
@@ -1783,7 +1983,7 @@ function renderCutoutTemplate() {
     // for a manually-dialed-in, visually-checked override, unlike the
     // automatic per-language sizing.
     const isCjkTitle = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
-    const headlineFit = fitFontSizeWrap(headline, titleMaxW, 700, TITLE_FONT_STACK, 108, 48, 1, 2, isCjkTitle);
+    const headlineFit = fitFontSizeWrap(headline, titleMaxW, 700, TITLE_FONT_STACK, 108, state.titleNoWrap ? 14 : 48, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
     const size = headlineFit.size * titleAdj.scale / 100;
     const lineH = size * 1.05;
     ctx.font = `700 ${size}px ${TITLE_FONT_STACK}`;
@@ -1850,7 +2050,6 @@ function renderCutoutTemplate() {
     const infoW = drawInfoLine(sessionParts, infoX, infoY, `400 ${infoSize}px ${FONT_STACK}`, textHex, 'left', '　', 0.75, textColMaxW);
     recordBounds('dates', infoX, infoY - infoSize * 0.8, infoW, infoSize);
   }
-
   // ---- Catchphrase, bottom-left ----
   // Bounded by the art panel's left edge so it never runs under the character.
   const mainCopy = els.mainCopy.value;
@@ -1858,13 +2057,20 @@ function renderCutoutTemplate() {
   const copyMaxW = textColMaxW;
   const mainCopyAdj = adj('mainCopy');
   const subCopyAdj = adj('subCopy');
-  const mainFont = `800 ${Math.round(38 * mainCopyAdj.scale / 100)}px ${FONT_STACK}`;
+  let mainFont = `800 ${Math.round(38 * mainCopyAdj.scale / 100)}px ${FONT_STACK}`;
   const subFont = `400 ${Math.round(24 * subCopyAdj.scale / 100)}px ${FONT_STACK}`;
   const isCjkLang = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
   const wrapFn = isCjkLang ? wrapTextChars : wrapText;
 
-  ctx.font = mainFont;
-  const mainLines = wrapFn(mainCopy, copyMaxW, mainFont);
+  let mainLines;
+  if (state.mainCopyNoWrap) {
+    const fit = fitFontSizeTruncate(mainCopy, copyMaxW, 800, FONT_STACK, 38, 10, 0);
+    mainFont = `800 ${fit.size * mainCopyAdj.scale / 100}px ${FONT_STACK}`;
+    mainLines = [fit.text];
+  } else {
+    ctx.font = mainFont;
+    mainLines = wrapFn(mainCopy, copyMaxW, mainFont);
+  }
   ctx.font = subFont;
   const subLines = subCopy ? wrapFn(subCopy, copyMaxW, subFont) : [];
 
@@ -1896,6 +2102,13 @@ function renderCutoutTemplate() {
     const subSize = 24 * subCopyAdj.scale / 100;
     const subW = Math.max(1, ...subLines.map(ln => ctx.measureText(ln).width));
     recordBounds('subCopy', textLeft + subCopyAdj.dx, subStartTy + subCopyAdj.dy - subSize * 0.8, subW, subLines.length * lineH2);
+  }
+
+  // Sale-tag + price pills, bottom-right, stacked above the logo/copyright
+  // cluster below — the pills carry their own solid background, so unlike
+  // plain text they don't need the corner scrim for contrast.
+  if (state.bannerPurpose === 'sale') {
+    drawSaleBadges(W - MARGIN, W - 170, 'right', accentHex, rgbToHex(pickTextColor(accent)), 20);
   }
 
   // ---- Logo + copyright, fixed bottom-right ----
@@ -1975,7 +2188,7 @@ function renderVerticalTitleTemplate() {
   ctx.clearRect(0, 0, W, W);
 
   // Solid base fill on the always-visible 'background' layer — this template
-  // is normally full-bleed art with nothing behind it, so hiding 原画 via
+  // is normally full-bleed art with nothing behind it, so hiding 素材 via
   // the adjustment panel's 非表示 checkbox would otherwise leave a fully
   // transparent hole instead of falling back to a solid color like every
   // other adjustable element does when hidden.
@@ -1997,7 +2210,7 @@ function renderVerticalTitleTemplate() {
     ctx.fillStyle = '#999';
     ctx.font = `400 20px ${FONT_STACK}`;
     ctx.textAlign = 'center';
-    ctx.fillText('キャラクター原画をアップロード', W / 2, W / 2);
+    ctx.fillText('素材をアップロード', W / 2, W / 2);
     ctx.restore();
   }
 
@@ -2100,7 +2313,7 @@ function renderVerticalTitleTemplate() {
       // rather than shrinking to a single crushed line, so a long
       // translated title still reads at a reasonably large size instead of
       // running into the band underneath it.
-      const titleFit = fitFontSizeWrap(titleText.toUpperCase(), W - 2 * MARGIN - 140, 700, TITLE_FONT_STACK, 84, 40, 2, 2, false);
+      const titleFit = fitFontSizeWrap(titleText.toUpperCase(), W - 2 * MARGIN - 140, 700, TITLE_FONT_STACK, 84, state.titleNoWrap ? 14 : 40, 2, state.titleNoWrap ? 1 : 2, false);
       const size = titleFit.size * titleAdj.scale / 100;
       const colGap = 14;
       const originX = titleX + titleAdj.dx, originY = MARGIN + 60 + titleAdj.dy;
@@ -2130,9 +2343,11 @@ function renderVerticalTitleTemplate() {
   // ---- Vertical date, left side ----
   const datesAdj = adj('dates');
   const dateOverrideText = els.dateOverride.value.trim();
-  const dateStartLabel = formatBannerDate(els.dateStart.value, state.currentLang);
   const dateEndLabel = formatBannerDate(els.dateEnd.value, state.currentLang);
-  const dateText = dateOverrideText || [dateStartLabel, dateEndLabel].filter(Boolean).join('  ―  ');
+  // Sale mode never shows a start date — see buildInfoLineParts() for why.
+  const dateText = state.bannerPurpose === 'sale'
+    ? (dateOverrideText || formatSaleDeadline(dateEndLabel, state.currentLang))
+    : (dateOverrideText || [formatBannerDate(els.dateStart.value, state.currentLang), dateEndLabel].filter(Boolean).join('  ―  '));
   if (dateText) {
     // Anchored at the top, rotated clockwise, so local +x runs downward the
     // screen — the string reads top-to-bottom in its natural left-to-right
@@ -2141,12 +2356,17 @@ function renderVerticalTitleTemplate() {
     // against the run of canvas available before the bottom ribbon band.
     const dOriginX = MARGIN + 20 + datesAdj.dx, dOriginY = MARGIN + 70 + datesAdj.dy;
     const maxDateRunW = Math.max(120, W - dOriginY - 150);
-    const dateFit = fitFontSizeTruncate(dateText, maxDateRunW, 600, FONT_STACK, 28 * datesAdj.scale / 100, 16, 0);
+    // Fit at the BASE size first, then apply .scale afterward — see the
+    // 情報帯型 date branches for why (feeding scale into the fit search's
+    // startSize caps out silently once the natural fit is smaller than
+    // the scaled request).
+    const dateFit = fitFontSizeTruncate(dateText, maxDateRunW, 600, FONT_STACK, 28, 16, 0);
+    const dateRunSize = dateFit.size * datesAdj.scale / 100;
     ctx.save();
     ctx.translate(dOriginX, dOriginY);
     ctx.rotate(Math.PI / 2);
     ctx.fillStyle = white;
-    ctx.font = `600 ${dateFit.size}px ${FONT_STACK}`;
+    ctx.font = `600 ${dateRunSize}px ${FONT_STACK}`;
     ctx.textAlign = 'left';
     ctx.shadowColor = 'rgba(0,0,0,0.5)';
     ctx.shadowBlur = 10;
@@ -2154,7 +2374,7 @@ function renderVerticalTitleTemplate() {
     ctx.fillText(dateFit.text, 0, 0);
     ctx.restore();
     ctx.shadowBlur = 0;
-    recordBounds('dates', dOriginX - dateFit.size * 0.2, dOriginY, dateFit.size, dateRunW);
+    recordBounds('dates', dOriginX - dateRunSize * 0.2, dOriginY, dateRunSize, dateRunW);
   }
 
   useLayer('decoration');
@@ -2196,12 +2416,17 @@ function renderVerticalTitleTemplate() {
   useLayer(ctaSourceV2);
   if (ctaText) {
     const ctaAdjV2 = adj(ctaSourceV2);
-    const ctaFit = fitFontSizeTruncate(ctaText, W - 2 * MARGIN, 800, FONT_STACK, 40, 24, 0);
+    // In sale mode the sale-tag/price pills sit in the band's bottom-right
+    // corner — narrow the available width so a long mainCopy/subCopy
+    // doesn't run under them.
+    const ctaMaxW = (state.bannerPurpose === 'sale' && (saleTagText() || priceTagText())) ? W - 2 * MARGIN - 260 : W - 2 * MARGIN;
+    const ctaFit = fitFontSizeTruncate(ctaText, ctaMaxW, 800, FONT_STACK, 40, 24, 0);
     const ctaSizeV2 = ctaFit.size * ctaAdjV2.scale / 100;
     ctx.font = `800 ${ctaSizeV2}px ${FONT_STACK}`;
     ctx.fillStyle = bandTextHex;
     ctx.textAlign = 'center';
-    const ctaCx = W / 2 + ctaAdjV2.dx, ctaCy = bandTop + bandH / 2 - 6 + ctaAdjV2.dy;
+    const ctaCx = (state.bannerPurpose === 'sale' && (saleTagText() || priceTagText()) ? W / 2 - 130 : W / 2) + ctaAdjV2.dx;
+    const ctaCy = bandTop + bandH / 2 - 6 + ctaAdjV2.dy;
     ctx.fillText(ctaFit.text, ctaCx, ctaCy);
     const ctaWV2 = ctx.measureText(ctaFit.text).width;
     recordBounds(ctaSourceV2, ctaCx - ctaWV2 / 2, ctaCy - ctaSizeV2 * 0.8, ctaWV2, ctaSizeV2);
@@ -2214,7 +2439,8 @@ function renderVerticalTitleTemplate() {
     ctx.fillStyle = bandTextHex;
     ctx.globalAlpha = 0.85;
     ctx.textAlign = 'center';
-    const subCx = W / 2 + subCopyAdj.dx, subCy = bandTop + bandH / 2 + 26 + subCopyAdj.dy;
+    const subCx = (state.bannerPurpose === 'sale' && (saleTagText() || priceTagText()) ? W / 2 - 130 : W / 2) + subCopyAdj.dx;
+    const subCy = bandTop + bandH / 2 + 26 + subCopyAdj.dy;
     ctx.fillText(els.subCopy.value, subCx, subCy);
     const subWV2 = ctx.measureText(els.subCopy.value).width;
     ctx.globalAlpha = 1;
@@ -2222,9 +2448,8 @@ function renderVerticalTitleTemplate() {
   }
 
   useLayer('venue');
-  // ---- Venue name (or store name/price in sale mode), just above the band ----
-  const venueLine = [els.venue.value.trim(), (state.bannerPurpose === 'sale' ? els.priceField.value.trim() : '')]
-    .filter(Boolean).join('　');
+  // ---- Venue name, just above the band (not shown at all in sale mode) ----
+  const venueLine = state.bannerPurpose === 'sale' ? '' : els.venue.value.trim();
   if (venueLine) {
     ctx.font = `600 24px ${FONT_STACK}`;
     ctx.fillStyle = white;
@@ -2233,6 +2458,15 @@ function renderVerticalTitleTemplate() {
     ctx.shadowBlur = 8;
     ctx.fillText(venueLine, MARGIN, bandTop - 18);
     ctx.shadowBlur = 0;
+  }
+
+  // ---- Sale-tag + price pills, bottom-right corner of the band ----
+  // Copyright sits bottom-left here, so the right side is free — reads as
+  // a small CTA-button cluster in the corner. White pill background (with
+  // accent-colored tag text) rather than an accent-on-accent pill, since
+  // this band IS accentHex — a colored pill would disappear into it.
+  if (state.bannerPurpose === 'sale') {
+    drawSaleBadges(W - MARGIN, W - 32, 'right', '#ffffff', accentHex, 15);
   }
 
   useLayer('copyright');
@@ -2286,7 +2520,7 @@ function renderCyberUiTemplate() {
   ctx.clearRect(0, 0, W, W);
 
   // Solid base fill on the always-visible 'background' layer — this template
-  // is normally full-bleed art with nothing behind it, so hiding 原画 via
+  // is normally full-bleed art with nothing behind it, so hiding 素材 via
   // the adjustment panel's 非表示 checkbox would otherwise leave a fully
   // transparent hole instead of falling back to a solid color like every
   // other adjustable element does when hidden.
@@ -2308,7 +2542,7 @@ function renderCyberUiTemplate() {
     ctx.fillStyle = '#999';
     ctx.font = `400 20px ${FONT_STACK}`;
     ctx.textAlign = 'center';
-    ctx.fillText('キャラクター原画をアップロード', W / 2, W / 2);
+    ctx.fillText('素材をアップロード', W / 2, W / 2);
     ctx.restore();
   }
 
@@ -2366,6 +2600,10 @@ function renderCyberUiTemplate() {
   // see below) purely so the title's headline knows where the badge's left
   // edge is and can wrap before running under it, instead of overlapping.
   const subCopyAdj = adj('subCopy');
+  // This permanent HUD badge always shows subCopy (regardless of banner
+  // purpose) — the dedicated sale-tag/price pills (below) are a separate
+  // element, not a replacement, so subCopy keeps working here exactly like
+  // it does in 集客 mode.
   const ctaLabel = (els.subCopy.value || 'ONLINE SALE').toUpperCase();
   const ctaFontSize = 17 * subCopyAdj.scale / 100;
   ctx.font = `700 ${ctaFontSize}px ${mono}`;
@@ -2402,7 +2640,7 @@ function renderCyberUiTemplate() {
     // dropped any text past line 2 with no truncation mark if the title was
     // long enough to need a 3rd line.
     const titleMaxW = Math.max(240, badgeX - titleLeft - 24);
-    const titleFit = fitFontSizeWrap(titleText, titleMaxW, 700, TITLE_FONT_STACK, 58, 32, 1, 2, isCjkLang);
+    const titleFit = fitFontSizeWrap(titleText, titleMaxW, 700, TITLE_FONT_STACK, 58, state.titleNoWrap ? 14 : 32, 1, state.titleNoWrap ? 1 : 2, isCjkLang);
     const size = titleFit.size * titleAdj.scale / 100;
     ctx.font = `700 ${size}px ${TITLE_FONT_STACK}`;
     ctx.fillStyle = white;
@@ -2442,9 +2680,16 @@ function renderCyberUiTemplate() {
   if (mainCopy) {
     const mainCopyAdj = adj('mainCopy');
     const maxW = W - 2 * MARGIN - 2 * bl;
-    const font = `700 ${Math.round(46 * mainCopyAdj.scale / 100)}px ${TITLE_FONT_STACK}`;
-    ctx.font = font;
-    const copyLines = wrapText(mainCopy, maxW, font);
+    let font = `700 ${Math.round(46 * mainCopyAdj.scale / 100)}px ${TITLE_FONT_STACK}`;
+    let copyLines;
+    if (state.mainCopyNoWrap) {
+      const fit = fitFontSizeTruncate(mainCopy, maxW, 700, TITLE_FONT_STACK, 46, 10, 0);
+      font = `700 ${fit.size * mainCopyAdj.scale / 100}px ${TITLE_FONT_STACK}`;
+      copyLines = [fit.text];
+    } else {
+      ctx.font = font;
+      copyLines = wrapText(mainCopy, maxW, font);
+    }
     const lineH = 56;
     let ty = W - MARGIN - bl - 96 - (copyLines.length - 1) * lineH;
     const mainStartTy = ty;
@@ -2459,7 +2704,7 @@ function renderCyberUiTemplate() {
     recordBounds('mainCopy', W / 2 + mainCopyAdj.dx - mainW / 2, mainStartTy + mainCopyAdj.dy - mainSize * 0.8, mainW, copyLines.length * lineH);
   }
 
-  // ---- Venue / dates / price readout, monospace, below catchphrase ----
+  // ---- Venue / dates readout, monospace, below catchphrase ----
   const infoParts = buildInfoLineParts();
   if (infoParts.length) {
     const datesAdj = adj('dates');
@@ -2467,6 +2712,12 @@ function renderCyberUiTemplate() {
     const infoX = W / 2 + datesAdj.dx, infoY = W - MARGIN - bl - 40 + datesAdj.dy;
     const infoW = drawInfoLine(infoParts, infoX, infoY, `500 ${infoSize}px ${mono}`, accentHex, 'center', '   //   ', 0.9, W - 2 * MARGIN - 2 * bl);
     recordBounds('dates', infoX - infoW / 2, infoY - infoSize * 0.8, infoW, infoSize);
+  }
+
+  // Sale-tag + price pills, bottom-right, above copyright — reads as a
+  // small CTA-button cluster in the HUD frame's corner.
+  if (state.bannerPurpose === 'sale') {
+    drawSaleBadges(W - inset - bl - 14, W - inset - bl - 40, 'right', accentHex, white, 18);
   }
 
   useLayer('copyright');
@@ -2572,7 +2823,7 @@ els.textPicker.addEventListener('input', () => { state.textOverride = hexToRgb(e
 // Field ids follow adj{Category}{Scale|Dx|Dy|Hidden}, matching
 // state.adjustments' keys 1:1, so this can bind all rows generically instead
 // of one hand-written listener set per category.
-const ADJUSTMENT_CATEGORIES = ['logo', 'copyright', 'title', 'mainCopy', 'subCopy', 'dates', 'extraText', 'art'];
+const ADJUSTMENT_CATEGORIES = ['logo', 'copyright', 'title', 'mainCopy', 'subCopy', 'dates', 'extraText', 'art', 'venue', 'saleTag'];
 
 // Pushes state.adjustments[cat] into its <input>s — used after any
 // non-typing change (canvas drag, wheel-resize, reset) so the panel never
@@ -2886,6 +3137,143 @@ function updateAdjustHighlight(key) {
   els.adjustHighlightLabel.textContent = ADJUSTMENT_LABELS[key] || key;
 }
 
+// Canva/Figma-style snap guides: while dragging (moving, not resizing) an
+// element, check its LEFT/CENTER/RIGHT (x) and TOP/CENTER/BOTTOM (y)
+// against the same three positions on the canvas's own center line and
+// every other currently-visible element — not just center-to-center. This
+// one mechanism covers every "these two should line up" case someone
+// drags for: centers matching (put this dead center, or on the same row
+// as that other line of text), tops or bottoms matching ("高さを揃えた" —
+// two elements sitting at the same level even if their own heights
+// differ), and one element's edge meeting another's ("上と下のテキストが
+// 重なった瞬間" — stacking two lines with zero gap between them). Guide
+// lines are positioned via JS, not a fixed 50%, since the matched target
+// isn't always the canvas midpoint.
+const SNAP_PX = 6;
+
+function collectSnapTargets(excludeKey, axis) {
+  const targets = [CANVAS_SIZE / 2];
+  Object.keys(state.elementBounds).forEach(k => {
+    if (k === excludeKey || adj(k).hidden) return;
+    const b = state.elementBounds[k];
+    if (axis === 'x') targets.push(b.x, b.x + b.w / 2, b.x + b.w);
+    else targets.push(b.y, b.y + b.h / 2, b.y + b.h);
+  });
+  return targets;
+}
+
+// Tries every (candidate, target) pair and keeps the closest one within
+// SNAP_PX — candidates are the dragged element's own left/center/right (or
+// top/center/bottom), so e.g. its top edge can snap to another element's
+// bottom edge, not just like-to-like.
+function bestSnap(candidates, targets) {
+  let best = null;
+  candidates.forEach(c => {
+    targets.forEach(t => {
+      const delta = t - c;
+      if (Math.abs(delta) < SNAP_PX && (!best || Math.abs(delta) < Math.abs(best.delta))) {
+        best = { delta, target: t };
+      }
+    });
+  });
+  return best;
+}
+
+function applyCenterSnapAndGuides(key) {
+  const b = state.elementBounds[key];
+  if (!b) { hideCenterGuides(); return; }
+  const xCandidates = [b.x, b.x + b.w / 2, b.x + b.w];
+  const yCandidates = [b.y, b.y + b.h / 2, b.y + b.h];
+  const xBest = bestSnap(xCandidates, collectSnapTargets(key, 'x'));
+  const yBest = bestSnap(yCandidates, collectSnapTargets(key, 'y'));
+  let snapped = false;
+  if (xBest) { state.adjustments[key].dx += Math.round(xBest.delta); snapped = true; }
+  if (yBest) { state.adjustments[key].dy += Math.round(yBest.delta); snapped = true; }
+  if (snapped) render();
+  updateGuideLines(xBest ? xBest.target : null, yBest ? yBest.target : null);
+}
+
+// Nudges state.adjustments[key].scale until getEdge() lands on `target`,
+// by measuring the relationship empirically (render, read the edge, try
+// a nearby scale, read again) rather than assuming a formula. Deliberately
+// not a closed-form calculation: different templates position text
+// differently — some draw a symmetric box around a fixed center, others
+// anchor to a baseline (where growing the font moves the top edge up much
+// more than the bottom edge moves down) — so "half the new height" isn't
+// the same offset from center for every element. Two render passes to
+// measure the local slope, then a third to correct for any nonlinearity,
+// is cheap and works regardless of which positioning scheme the template
+// underneath happens to use.
+function snapScaleToEdgeTarget(key, getEdge, target) {
+  const adj = state.adjustments[key];
+  const s0 = adj.scale;
+  const e0 = getEdge();
+  const probeScale = Math.max(5, Math.min(1000, Math.round(s0 * 1.05)));
+  if (probeScale === s0) return false;
+  adj.scale = probeScale;
+  render();
+  const e1 = getEdge();
+  const slope = (e1 - e0) / (probeScale - s0);
+  if (!isFinite(slope) || slope === 0) { adj.scale = s0; render(); return false; }
+  let scale = Math.max(5, Math.min(1000, Math.round(s0 + (target - e0) / slope)));
+  adj.scale = scale;
+  render();
+  const e2 = getEdge();
+  if (Math.abs(e2 - target) > 0.75 && Math.abs(e2 - e1) > 0.001) {
+    const slope2 = (e2 - e1) / (scale - probeScale);
+    if (isFinite(slope2) && slope2 !== 0) {
+      const scale2 = Math.max(5, Math.min(1000, Math.round(scale + (target - e2) / slope2)));
+      adj.scale = scale2;
+      render();
+    }
+  }
+  return true;
+}
+
+// Corner-resize counterpart of applyCenterSnapAndGuides — the drag itself
+// only ever moves ONE edge at a time (whichever corner is being dragged),
+// so this snaps that one edge to line up with another element's top/
+// center/bottom (or left/center/right) — e.g. drag a text's top-left
+// corner until its top edge matches another line's top edge, to make two
+// different-sized texts read at "the same height". Only one axis is
+// satisfied per drag: vertical takes priority since "揃えて高さを揃える"
+// is the explicit ask, horizontal only gets a turn when nothing vertical
+// is close enough to snap to.
+function applyResizeSnapAndGuides(key, corner) {
+  const b = state.elementBounds[key];
+  if (!b || !corner) { hideCenterGuides(); return; }
+  const isNorth = corner.includes('n');
+  const isWest = corner.includes('w');
+  const getYEdge = () => { const bb = state.elementBounds[key]; return isNorth ? bb.y : bb.y + bb.h; };
+  const getXEdge = () => { const bb = state.elementBounds[key]; return isWest ? bb.x : bb.x + bb.w; };
+  const yBest = bestSnap([getYEdge()], collectSnapTargets(key, 'y'));
+  const xBest = yBest ? null : bestSnap([getXEdge()], collectSnapTargets(key, 'x'));
+  if (yBest) snapScaleToEdgeTarget(key, getYEdge, yBest.target);
+  else if (xBest) snapScaleToEdgeTarget(key, getXEdge, xBest.target);
+  updateGuideLines(yBest ? null : (xBest ? xBest.target : null), yBest ? yBest.target : null);
+}
+
+function updateGuideLines(xTarget, yTarget) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = rect.width / CANVAS_SIZE, sy = rect.height / CANVAS_SIZE;
+  if (xTarget !== null) {
+    els.centerGuideV.style.left = (xTarget * sx) + 'px';
+    els.centerGuideV.style.display = 'block';
+  } else {
+    els.centerGuideV.style.display = 'none';
+  }
+  if (yTarget !== null) {
+    els.centerGuideH.style.top = (yTarget * sy) + 'px';
+    els.centerGuideH.style.display = 'block';
+  } else {
+    els.centerGuideH.style.display = 'none';
+  }
+}
+function hideCenterGuides() {
+  els.centerGuideV.style.display = 'none';
+  els.centerGuideH.style.display = 'none';
+}
+
 const dragState = { key: null, startX: 0, startY: 0, startDx: 0, startDy: 0 };
 // Corner-handle resize: dragging a corner scales the element based on how
 // far that corner moves relative to the box's own center — the same .scale
@@ -2893,7 +3281,7 @@ const dragState = { key: null, startX: 0, startY: 0, startDx: 0, startDy: 0 };
 // a corner drag instead. centerX/centerY/startDist are captured once at
 // mousedown so the reference point doesn't drift as the box itself resizes
 // mid-drag.
-const resizeState = { key: null, centerX: 0, centerY: 0, startDist: 0, startScale: 100 };
+const resizeState = { key: null, corner: null, centerX: 0, centerY: 0, startDist: 0, startScale: 100 };
 
 canvas.addEventListener('mousedown', (evt) => {
   const { x, y } = getCanvasCoords(evt);
@@ -2927,6 +3315,7 @@ document.querySelectorAll('#adjustHighlight .resize-handle').forEach(handle => {
     const corner = handle.dataset.corner;
     const b = state.elementBounds[key];
     resizeState.key = key;
+    resizeState.corner = corner;
     resizeState.centerX = b.x + b.w / 2;
     resizeState.centerY = b.y + b.h / 2;
     const cornerX = corner.includes('e') ? b.x + b.w : b.x;
@@ -2950,8 +3339,9 @@ window.addEventListener('mousemove', (evt) => {
     recordAdjustmentChange();
     const scale = Math.max(5, Math.min(1000, Math.round(resizeState.startScale * (dist / resizeState.startDist))));
     state.adjustments[resizeState.key].scale = scale;
-    syncAdjustmentInputs(resizeState.key);
     render();
+    applyResizeSnapAndGuides(resizeState.key, resizeState.corner);
+    syncAdjustmentInputs(resizeState.key);
     updateAdjustHighlight(resizeState.key);
     return;
   }
@@ -2962,8 +3352,9 @@ window.addEventListener('mousemove', (evt) => {
   const dy = Math.round(dragState.startDy + (y - dragState.startY));
   state.adjustments[dragState.key].dx = dx;
   state.adjustments[dragState.key].dy = dy;
-  syncAdjustmentInputs(dragState.key);
   render();
+  applyCenterSnapAndGuides(dragState.key);
+  syncAdjustmentInputs(dragState.key);
   updateAdjustHighlight(dragState.key);
 });
 
@@ -2972,11 +3363,13 @@ window.addEventListener('mouseup', () => {
     commitAdjustmentUndoGroup();
     els.adjustHighlight.classList.remove('dragging');
     dragState.key = null;
+    hideCenterGuides();
   }
   if (resizeState.key) {
     commitAdjustmentUndoGroup();
     els.adjustHighlight.classList.remove('dragging');
     resizeState.key = null;
+    hideCenterGuides();
   }
 });
 
@@ -2991,7 +3384,7 @@ canvasWrap.addEventListener('mouseleave', () => {
   }
 });
 
-[els.title, els.dateStart, els.dateEnd, els.dateOverride, els.venue, els.mainCopy, els.subCopy, els.copyright, els.extraText, els.priceField]
+[els.title, els.dateStart, els.dateEnd, els.dateOverride, els.venue, els.mainCopy, els.subCopy, els.copyright, els.extraText, els.priceField, els.saleTag]
   .forEach(el => el.addEventListener('input', render));
 
 // Keep the "still untranslated?" chip badges live while typing, not just
@@ -3001,7 +3394,7 @@ canvasWrap.addEventListener('mouseleave', () => {
 // this translation matches today's source text", so it records a snapshot —
 // otherwise a hand-written (not auto-translated) translation would never get
 // one, and a later source edit could never be detected as making it stale.
-[['title', els.title], ['mainCopy', els.mainCopy], ['subCopy', els.subCopy]].forEach(([fieldName, el]) => {
+[['title', els.title], ['mainCopy', els.mainCopy], ['subCopy', els.subCopy], ['saleTag', els.saleTag]].forEach(([fieldName, el]) => {
   el.addEventListener('input', () => {
     if (state.currentLang !== getSourceLang()) {
       const sourceLang = getSourceLang();
@@ -3020,6 +3413,15 @@ els.bannerPurposeSelect.addEventListener('change', () => {
 
 els.titleFontSelect.addEventListener('change', () => {
   state.titleFont = els.titleFontSelect.value;
+  render();
+});
+
+els.titleNoWrapToggle.addEventListener('change', () => {
+  state.titleNoWrap = els.titleNoWrapToggle.checked;
+  render();
+});
+els.mainCopyNoWrapToggle.addEventListener('change', () => {
+  state.mainCopyNoWrap = els.mainCopyNoWrapToggle.checked;
   render();
 });
 
@@ -3196,7 +3598,7 @@ function showLayerExportStatus(text, isError) {
 // it here instead.
 function confirmProceedWithoutArt() {
   if (state.artImage) return true;
-  return confirm('キャラクター原画がアップロードされていません（ページを再読み込みすると原画の選択はリセットされます）。このまま書き出しますか？');
+  return confirm('素材がアップロードされていません（ページを再読み込みすると素材の選択はリセットされます）。このまま書き出しますか？');
 }
 
 // See findUntranslatedFields() above — warns before a final export if any
@@ -3317,7 +3719,8 @@ const LANG_FIELD_GROUPS = {
   mainCopy: ['mainCopy'],
   subCopy: ['subCopy'],
   copyright: ['copyright'],
-  extraText: ['extraText']
+  extraText: ['extraText'],
+  saleTag: ['saleTag']
 };
 
 function saveCurrentDraft() {
@@ -3348,7 +3751,7 @@ function loadDraft(lang) {
 // text" before export. copyright is deliberately excluded — a copyright
 // notice is very often meant to stay identical across every language, so
 // flagging it would just be noise.
-const TRANSLATION_CHECK_GROUPS = ['title', 'mainCopy', 'subCopy'];
+const TRANSLATION_CHECK_GROUPS = ['title', 'mainCopy', 'subCopy', 'saleTag'];
 const TRANSLATION_CHECK_LABELS = { title: '展示会タイトル', mainCopy: 'メインコピー', subCopy: 'サブコピー' };
 
 // Per-language fields get seeded with another language's text the first
@@ -3887,7 +4290,7 @@ async function runBatchGenerate() {
   if (!state.artImage) {
     els.batchStatus.classList.add('error');
     els.batchStatus.style.display = '';
-    els.batchStatus.textContent = 'キャラクター原画をアップロードしてから実行してください。';
+    els.batchStatus.textContent = '素材をアップロードしてから実行してください。';
     return;
   }
   const sessions = getSelectedBatchSessions();
@@ -4013,7 +4416,7 @@ function closeBatchPreview() {
 
 async function showBatchPreview() {
   if (!state.artImage) {
-    alert('キャラクター原画をアップロードしてから実行してください。');
+    alert('素材をアップロードしてから実行してください。');
     return;
   }
   const sessions = getSelectedBatchSessions();
@@ -4135,7 +4538,7 @@ function isGoogleConfigured() {
 let googleTokenClient = null;
 let authRequestTimer = null;
 
-// Sign-in appears twice in the UI (キャラクター原画 欄, for Drive folder
+// Sign-in appears twice in the UI (素材選定 欄, for Drive folder
 // access, and 案件マスタから貼り付け 欄, for Sheets access) — same underlying
 // OAuth token client and account state either way, just two entry points so
 // whichever section the user starts from has its own button rather than
