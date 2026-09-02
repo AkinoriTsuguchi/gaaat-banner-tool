@@ -5,7 +5,7 @@
 <title>GAAAT バナー自動生成ツール</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Noto+Sans+JP:wght@700;900&family=Playfair+Display:wght@700&family=Shippori+Mincho:wght@700&family=Fredoka:wght@700&family=M+PLUS+Rounded+1c:wght@700&family=Orbitron:wght@700&family=Inter:wght@700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Noto+Sans+JP:wght@700;900&family=Playfair+Display:wght@700&family=Shippori+Mincho:wght@700&family=Fredoka:wght@700&family=M+PLUS+Rounded+1c:wght@700&family=Orbitron:wght@700&family=Inter:wght@700&family=Anton&family=Bangers&family=Reggae+One&family=Cardo:wght@700&family=Yuji+Syuku&family=Press+Start+2P&family=DotGothic16&family=Poppins:wght@700&family=Zen+Kaku+Gothic+New:wght@700;900&display=swap" rel="stylesheet">
 <style>
   :root{
     --panel-bg:#1c1e22;
@@ -768,14 +768,8 @@
       <p class="hint">案件マスタの企画タイトルはほとんどが1行の短い文言です（例:「頭文字D ART EXHIBITION by GAAAT」）。1行だけ入力すればOKです。案件マスタの貼り付け／スプレッドシート取得を行うと、企画タイトル（日本語）で選択中の言語欄の内容が丸ごと上書きされます（Enterで追加した2行目以降がある場合はそれも含めて置き換わります）。「言語別」がオンの場合、他の言語に切り替えると翻訳前のタイトルがコピーされるので、そこから訳文に書き換えてください。ブランド名などで訳さず統一したい場合はチェックを外してください。長くて自動的に2行に折り返される際、改行位置が意図と違う場合や、意図的に複数行に分けたい場合は、改行したい位置でEnterを押すか、半角の「｜」を入れてください（例:「GAAAT銀魂｜藝術展」→「GAAAT銀魂」「藝術展」の2行）。折り返し自体を止めたい場合は上の「1行に収める」にチェックしてください（文字が小さくなっても1行のまま表示されます）。</p>
 
       <label for="titleFontSelect">タイトルフォント</label>
-      <select id="titleFontSelect">
-        <option value="gothic">太字ゴシック（デフォルト）</option>
-        <option value="mincho">明朝・上品</option>
-        <option value="rounded">丸ゴシック・ポップ</option>
-        <option value="cyber">サイバー・近未来</option>
-        <option value="clean">シンプル・ゴシック</option>
-      </select>
-      <p class="hint">展示会タイトル（および⑤サイバーUI型のキャッチコピー）に使うフォントです。作品の世界観に合わせて選んでください。全テンプレート・全言語・全案件（一括生成含む）で共通のプロジェクト単位の設定です。</p>
+      <select id="titleFontSelect"></select>
+      <p class="hint">展示会タイトル（および⑤サイバーUI型のキャッチコピー）に使うフォントです。作品の世界観に合わせて選んでください。全テンプレート・全言語・全案件（一括生成含む）で共通のプロジェクト単位の設定です。一覧は「おすすめ」→「よく使うフォント」（このブラウザでの選択回数順）→「その他」の順に並びます。</p>
 
       <label id="dateFieldLabel">会期情報（開始日・終了日）</label>
       <div class="row">
@@ -983,6 +977,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=83"></script>
+<script src="app.js?v=84"></script>
 </body>
 </html>

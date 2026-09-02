@@ -763,3 +763,18 @@ Meta(Instagram/Facebook)のフィード広告として配信する前提で、�
 **実装**: 両テンプレートの会場名描画ブロックに、他の要素と同じ`scale`（フィット後に掛け算する方式）/`dx`/`dy`/`hidden`対応を追加。実装中、`renderCurrentLayout`側で会場名の`dy`をドラッグすると、直下に描画される会期（`dates`）のベースライン計算がその会場名の`dy`込みの座標（`venueBaseline`）を直接参照していたため、会場名を動かすと会期まで一緒にずれてしまう連鎖バグを検出——ロゴの実スケールに会期側の位置計算が引っ張られていた過去の不具合（追加実装内の`logoBottomY`修正）と同じパターン。会期側の基準点を、会場名の`dy`を含まない固定値`venueBaselineBase`に分離することで解消（会場名自体の描画位置は従来通り`venueBaseline = venueBaselineBase + venueAdj.dy`のまま）。
 
 **動作確認**: 実ブラウザで`default`/`vertical2`の両テンプレートについて、`state.adjustments.venue.dx/dy`を変更しても`state.elementBounds.dates`がバイト単位で変化しないこと、`venue.scale`を200にすると会場名の高さがちょうど2倍になること、`venue.hidden`にすると`venue`レイヤーのアルファチャンネルが全て0になることをプログラム的に確認。6テンプレート×2モードのレンダリングエラー無しを確認。
+
+---
+
+### タイトルフォントを5種類→10種類に拡充し、「おすすめ」「よく使う」を上位表示 (2026-09-02 追加実装12)
+
+**背景**: 「選べるフォントをもっと増やしたいのと、よく使うフォントとおすすめフォントを上位に表示するようにしたい」という要望。
+
+**実装**:
+- `TITLE_FONT_PRESETS`に5種類追加（既存5種と合わせて計10種）: `impact`（極太インパクト・ポスター風／Anton+Noto Sans JP）、`comic`（コミック・レトロポップ／Bangers+Reggae One）、`brush`（筆文字・和風／Cardo+Yuji Syuku）、`pixel`（ドット・レトロゲーム風／Press Start 2P+DotGothic16）、`elegant`（モダン・エレガント／Poppins+Zen Kaku Gothic New）。各プリセットは既存と同じ「英字の個性的な見出し書体＋同じ雰囲気の和文書体」のペア構成。`index.html`のGoogle Fonts `<link>`にこれらのfamilyを追加。
+- 各プリセットに任意の`recommended: true`フラグを追加できるようにし、`gothic`（デフォルト）・`impact`・`brush`の3つに設定（GAAATのアニメ・マンガ展示会バナーで汎用性が高いと判断したもの）。
+- 「よく使う」はサーバー無し・このブラウザのみの集計: `titleFontSelect`で選択するたびに`localStorage`（キー`gaaat-banner-tool:title-font-usage`）へ選択回数を加算する`bumpTitleFontUsage()`を追加（既存の`gaaat-banner-tool:adjustment-presets`と同じ設計方針）。
+- `#titleFontSelect`は静的な`<option>`列挙をやめ、`renderTitleFontOptions()`が起動時・選択変更のたびに`<optgroup>`3つ（「おすすめ」→「よく使うフォント」（選択回数の多い順、おすすめと重複除外）→「その他」）で組み立て直す方式に変更。選択中の値は再構築後も保持する。
+- Canvasのフォント強制ロード処理（`document.fonts.load`を全プリセット分呼ぶ箇所）を、ハードコードされた配列から`TITLE_FONT_PRESETS`の各`stack`先頭2書体を自動抽出する方式に変更——今後プリセットを追加する際にこの配列を手動更新し忘れる心配がなくなる。
+
+**動作確認**: 実ブラウザで10プリセット全てを`state.titleFont`に設定して`render()`しエラー無しを確認。`localStorage`をクリアした状態で`#titleFontSelect`のDOM構造が「おすすめ」（gothic/impact/brush）→「その他」（残り7件、宣言順）の2グループになることを確認。`bumpTitleFontUsage('pixel')`を3回・`bumpTitleFontUsage('clean')`を1回呼んでから`renderTitleFontOptions()`すると、「よく使うフォント」グループが`[pixel, clean]`（使用回数降順）で「おすすめ」と「その他」の間に挿入されることを確認。
