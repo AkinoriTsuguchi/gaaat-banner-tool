@@ -281,7 +281,7 @@ const state = {
     accent: { r: 226, g: 87, b: 76 },
     accentRaw: { r: 226, g: 87, b: 76 }
   },
-  languages: ['ja', 'en'],
+  languages: ['ja'],
   currentLang: 'ja',
   template: 'current',
   // Which TITLE_FONT_PRESETS entry the title (and cyberUI5's catchphrase)
@@ -291,8 +291,8 @@ const state = {
   // "1行に収める" toggles — force a single shrink-to-fit line instead of
   // auto-wrapping to 2 lines. Project-wide formatting choices like
   // titleFont, not per-language content, so not part of state.drafts.
-  titleNoWrap: false,
-  mainCopyNoWrap: false,
+  titleNoWrap: true,
+  mainCopyNoWrap: true,
   // 'venue' = 来場促進(集客用), 'sale' = オンライン販売用
   bannerPurpose: 'venue',
   googleAccessToken: null,

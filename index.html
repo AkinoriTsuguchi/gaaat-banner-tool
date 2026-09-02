@@ -764,7 +764,7 @@
         <label class="lang-toggle"><input type="checkbox" id="langToggle_title" checked><span>言語別</span></label>
       </div>
       <textarea id="titleField">GINTAMA ART EXHIBITION by GAAAT</textarea>
-      <label class="lang-toggle"><input type="checkbox" id="titleNoWrapToggle"><span>1行に収める（自動改行しない・収まらない分は自動縮小）</span></label>
+      <label class="lang-toggle"><input type="checkbox" id="titleNoWrapToggle" checked><span>1行に収める（自動改行しない・収まらない分は自動縮小）</span></label>
       <p class="hint">案件マスタの企画タイトルはほとんどが1行の短い文言です（例:「頭文字D ART EXHIBITION by GAAAT」）。1行だけ入力すればOKで、2行目・3行目は「THE MOBILE POLICE」「Mobile Police Patlabor - Art of GEN【RELOAD】」のような、大見出しとは別に英字タグラインや正式名称を添えたい特殊な案件（パトレイバー展など）でだけ使う任意欄です。案件マスタの貼り付け／スプレッドシート取得を行うと、企画タイトル（日本語）で選択中の言語欄の1行目が自動的に上書きされます。「言語別」がオンの場合、他の言語に切り替えると翻訳前のタイトルがコピーされるので、そこから訳文に書き換えてください。ブランド名などで訳さず統一したい場合はチェックを外してください。1行目が長くて自動的に2行に折り返される際、改行位置が意図と違う場合は、改行したい位置に半角の「｜」を入れてください（例:「GAAAT銀魂｜藝術展」→「GAAAT銀魂」「藝術展」の2行）。折り返し自体を止めたい場合は上の「1行に収める」にチェックしてください（文字が小さくなっても1行のまま表示されます）。</p>
 
       <label for="titleFontSelect">タイトルフォント</label>
@@ -812,7 +812,7 @@
         <label class="lang-toggle"><input type="checkbox" id="langToggle_mainCopy" checked><span>言語別</span></label>
       </div>
       <input type="text" id="mainCopyField" value="歴代シリーズを横断する 唯一無二の展示・販売会。">
-      <label class="lang-toggle"><input type="checkbox" id="mainCopyNoWrapToggle"><span>1行に収める（自動改行しない・収まらない分は自動縮小）</span></label>
+      <label class="lang-toggle"><input type="checkbox" id="mainCopyNoWrapToggle" checked><span>1行に収める（自動改行しない・収まらない分は自動縮小）</span></label>
 
       <div class="field-label-row">
         <label id="subCopyFieldLabel">サブコピー（帯・2行目）</label>
@@ -983,6 +983,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=78"></script>
+<script src="app.js?v=80"></script>
 </body>
 </html>
