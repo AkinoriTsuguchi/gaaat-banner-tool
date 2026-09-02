@@ -1303,23 +1303,20 @@ function renderCurrentLayout() {
     ctx.fillText(dateEndLabel, colLeft + datesAdj.dx, dateEndBaseline);
     let datesTop = dateStartBaseline - dateSize * 0.8;
 
-    // Slash connector — a short diagonal accent, sized to roughly the date
-    // text's cap-height and sitting next to the START date (dateStartLabel)
-    // rather than centered in the gap between the two lines — centering on
-    // the gap visually read as attached to the END date instead, since the
-    // slash's own height falls mostly below its vertical midpoint.
+    // Slash connector, sitting right after the START date. Drawn as an
+    // actual "/" text glyph (same font/baseline as dateStartLabel) rather
+    // than a hand-drawn diagonal stroke — a hand-drawn line's height/angle
+    // never quite matched the surrounding text's own cap-height and
+    // baseline no matter how it was tuned, while a real glyph aligns
+    // perfectly by definition. Positioned off `startW` (this line's own
+    // width), not `dateBlockW`, so it hugs "(金)" itself even when the end
+    // date happens to be the wider of the two lines.
     useLayer('decoration');
     if (dateStartLabel && dateEndLabel) {
-      const slashMidY = dateStartBaseline - dateSize * 0.4;
-      const slashHalfH = dateSize * 0.42;
-      ctx.save();
-      ctx.strokeStyle = textHex;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(colLeft + datesAdj.dx + dateBlockW + 16, slashMidY - slashHalfH);
-      ctx.lineTo(colLeft + datesAdj.dx + dateBlockW + 4, slashMidY + slashHalfH);
-      ctx.stroke();
-      ctx.restore();
+      ctx.font = dateFont;
+      ctx.fillStyle = textHex;
+      ctx.textAlign = 'left';
+      ctx.fillText('/', colLeft + datesAdj.dx + startW + 6, dateStartBaseline);
     }
     useLayer('dates');
 
