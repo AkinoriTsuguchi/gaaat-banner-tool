@@ -360,7 +360,7 @@ state.elementBounds = {};
 const ADJUSTMENT_LABELS = {
   logo: 'ロゴ', copyright: 'コピーライト', title: 'タイトル',
   mainCopy: 'メインコピー', subCopy: 'サブコピー', art: '素材', dates: '会期情報',
-  extraText: '追加テキスト', venue: '価格バッジ（オンライン販売用）',
+  extraText: '追加テキスト', venue: '開催会場名／価格バッジ',
   saleTag: 'セールタグバッジ（オンライン販売用）'
 };
 function recordBounds(key, x, y, w, h) {
@@ -681,6 +681,69 @@ function drawInfoLine(parts, x, y, font, color, align, separator, alpha = 1, max
   return totalW;
 }
 
+// Same layout math as drawInfoLine (one shared line, shrink-to-fit,
+// alignment), but each part keeps its OWN adjustment category (`venue`/
+// `dates`) instead of being recorded as a single combined box — lets
+// 版元 feedback move or hide the venue name and the date separately
+// instead of only as one joined line. The shared line position is still
+// computed from each part's UNADJUSTED width, so by default this looks
+// identical to drawInfoLine; only an explicit per-part drag/hide moves a
+// part away from that shared baseline (the separator stays put in the
+// gap between their default — not dragged — positions).
+function drawVenueDateLine(parts, x, y, font, color, align, separator, alpha = 1, maxWidth = null) {
+  if (!parts.length) return 0;
+  ctx.font = font;
+  let sepW = ctx.measureText(separator).width;
+  let widths = parts.map(p => ctx.measureText(p.text).width);
+  let totalW = widths.reduce((a, b) => a + b, 0) + sepW * (parts.length - 1);
+
+  if (maxWidth && totalW > maxWidth) {
+    const m = font.match(/^(\S+)\s+([\d.]+)px\s+(.*)$/);
+    if (m) {
+      const scale = Math.max(0.7, maxWidth / totalW);
+      font = `${m[1]} ${Math.round(parseFloat(m[2]) * scale)}px ${m[3]}`;
+      ctx.font = font;
+      sepW = ctx.measureText(separator).width;
+      widths = parts.map(p => ctx.measureText(p.text).width);
+      totalW = widths.reduce((a, b) => a + b, 0) + sepW * (parts.length - 1);
+    }
+  }
+
+  const fontPxMatch = font.match(/(\d+(?:\.\d+)?)px/);
+  const fontPx = fontPxMatch ? parseFloat(fontPxMatch[1]) : 24;
+
+  let cursorX;
+  if (align === 'center') cursorX = x - totalW / 2;
+  else if (align === 'right') cursorX = x - totalW;
+  else cursorX = x;
+
+  parts.forEach((p, i) => {
+    const pAdj = adj(p.layer);
+    useLayer(p.layer);
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'left';
+    ctx.globalAlpha = alpha;
+    const px = cursorX + pAdj.dx, py = y + pAdj.dy;
+    if (!pAdj.hidden) ctx.fillText(p.text, px, py);
+    ctx.globalAlpha = 1;
+    recordBounds(p.layer, px, py - fontPx * 0.8, widths[i], fontPx);
+    cursorX += widths[i];
+    if (i < parts.length - 1) {
+      useLayer('decoration');
+      ctx.font = font;
+      ctx.fillStyle = color;
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = alpha;
+      ctx.fillText(separator, cursorX, y);
+      ctx.globalAlpha = 1;
+      cursorX += sepW;
+    }
+  });
+
+  return totalW;
+}
+
 // Fallback CTA text for templates with a dedicated badge/pill/band — only
 // kicks in when the user hasn't typed anything, so an online-sale banner
 // still reads as one even before any copy is written.
@@ -911,10 +974,12 @@ function wrapAtSize(text, maxWidth, spacing, byChar) {
 // auto-wrap below packs purely by width and can split a word/phrase
 // somewhere that reads awkwardly (found from a real title where 「藝術展」
 // split as 「藝」+「術展」), so an explicit "|"/"｜" always takes priority
-// over automatic wrapping when present.
+// over automatic wrapping when present. A real line break (Enter in the
+// textarea) is treated the same way, so pressing Enter is an alternative to
+// typing "｜".
 function fitFontSizeWrap(text, maxWidth, weight, family, startSize, minSize, spacing = 0, maxLines = 2, byChar = false) {
-  if (text.includes('|') || text.includes('｜')) {
-    const manualLines = text.split(/[|｜]/).map(s => s.trim()).filter(Boolean).slice(0, maxLines);
+  if (/[|｜\n]/.test(text)) {
+    const manualLines = text.split(/[|｜\n]/).map(s => s.trim()).filter(Boolean).slice(0, maxLines);
     let manualSize = startSize;
     while (manualSize > minSize) {
       ctx.font = `${weight} ${manualSize}px ${family}`;
@@ -1101,7 +1166,6 @@ function renderCurrentLayout() {
 
   useLayer('title');
   // ---- Title block ----
-  const lines = els.title.value.split('\n').map(s => s.trim()).filter(Boolean);
   const titleMaxW = W - 2 * 110;
   let cursorY = 96;
 
@@ -1110,7 +1174,8 @@ function renderCurrentLayout() {
   const colRight = artLeft - 40;
 
   const titleAdj = adj('title');
-  if (lines[0]) {
+  const titleText = els.title.value.trim();
+  if (titleText) {
     // Wraps to up to 2 lines rather than shrinking to a single crushed
     // line — a realistic long title (e.g. a 32-character title) used to
     // land within a few px of the old 40px floor, barely bigger than the
@@ -1119,7 +1184,7 @@ function renderCurrentLayout() {
     // headline rather than flat body text, matching the more graphic
     // treatment the other templates already have.
     const isCjkTitle = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
-    const titleFit = fitFontSizeWrap(lines[0].toUpperCase(), titleMaxW, 700, TITLE_FONT_STACK, 136, state.titleNoWrap ? 14 : 64, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
+    const titleFit = fitFontSizeWrap(titleText.toUpperCase(), titleMaxW, 700, TITLE_FONT_STACK, 136, state.titleNoWrap ? 14 : 64, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
     const size = titleFit.size * titleAdj.scale / 100;
     const titleLineH = size * 1.05;
     cursorY += size * 0.78;
@@ -1143,34 +1208,8 @@ function renderCurrentLayout() {
   }
 
   // The art panel starts right under the main headline (matching the
-  // reference banner this layout is modeled on) rather than under the whole
-  // title block — the subtitle/tagline instead run down the left column
-  // beside the artwork, not full-width, so they no longer push it down.
+  // reference banner this layout is modeled on).
   const artTop = Math.max(cursorY + 40, 220);
-
-  if (lines[1]) {
-    const size2 = 26;
-    cursorY += 30;
-    drawSpacedText(lines[1].toUpperCase(), colLeft, cursorY, {
-      font: `600 ${size2}px ${FONT_STACK}`, spacing: 5, color: textHex, align: 'left'
-    });
-    cursorY += 16;
-  }
-
-  if (lines[2]) {
-    const size3 = 28;
-    const font3 = `500 ${size3}px ${FONT_STACK}`;
-    const wrapped = wrapText(lines.slice(2).join(' '), colRight - colLeft, font3);
-    cursorY += 38;
-    ctx.font = font3;
-    ctx.fillStyle = textHex;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    wrapped.forEach((ln, i) => {
-      ctx.fillText(ln, colLeft, cursorY + i * 36);
-    });
-    cursorY += (wrapped.length - 1) * 36;
-  }
 
   useLayer('decoration');
   // ---- Bottom band ----
@@ -1538,8 +1577,7 @@ function renderFrameTemplate() {
   useLayer('title');
   // ---- Headline (top center, wraps up to 2 lines rather than shrinking to
   // a single crushed line — see fitFontSizeWrap) ----
-  const lines = els.title.value.split('\n').map(s => s.trim()).filter(Boolean);
-  const headline = (lines[0] || '').toUpperCase();
+  const headline = els.title.value.trim().toUpperCase();
   let headerBottom = MARGIN + 30;
   const titleAdj = adj('title');
   if (headline) {
@@ -1572,14 +1610,15 @@ function renderFrameTemplate() {
     headerBottom += 28;
   }
 
-  // venue / date line, muted, centered
+  // venue / date line, muted, centered — venue and dates are independently
+  // draggable/hideable (drawVenueDateLine), sharing this line's base
+  // position and font size only as their default, undragged layout.
   const infoParts = buildInfoLineParts();
   if (infoParts.length) {
     const datesAdj = adj('dates');
     const infoSize = Math.round(24 * datesAdj.scale / 100);
-    const infoX = W / 2 + datesAdj.dx, infoY = headerBottom + 24 + datesAdj.dy;
-    const infoW = drawInfoLine(infoParts, infoX, infoY, `500 ${infoSize}px ${FONT_STACK}`, textHex, 'center', '   ／   ', 0.7, W - 2 * MARGIN);
-    recordBounds('dates', infoX - infoW / 2, infoY - infoSize * 0.8, infoW, infoSize);
+    const infoX = W / 2, infoY = headerBottom + 24;
+    drawVenueDateLine(infoParts, infoX, infoY, `500 ${infoSize}px ${FONT_STACK}`, textHex, 'center', '   ／   ', 0.7, W - 2 * MARGIN);
     headerBottom += 52;
   } else {
     headerBottom += 10;
@@ -1741,8 +1780,7 @@ function renderSpotlightFrameTemplate() {
   useLayer('title');
   // ---- Title: large, outlined + drop shadow, wraps up to 2 lines rather
   // than shrinking to a single crushed line (see fitFontSizeWrap) ----
-  const lines = els.title.value.split('\n').map(s => s.trim()).filter(Boolean);
-  const titleText = (lines[0] || '').toUpperCase();
+  const titleText = els.title.value.trim().toUpperCase();
   let cursorY = MARGIN + 40;
   const titleAdj = adj('title');
   if (titleText) {
@@ -1834,9 +1872,8 @@ function renderSpotlightFrameTemplate() {
   if (infoParts.length) {
     const datesAdj = adj('dates');
     const infoSize = Math.round(22 * datesAdj.scale / 100);
-    const infoX = W / 2 + datesAdj.dx, infoY = rowY + 38 + datesAdj.dy;
-    const infoW = drawInfoLine(infoParts, infoX, infoY, `500 ${infoSize}px ${FONT_STACK}`, '#fff', 'center', '   ／   ', 0.85, W - 2 * MARGIN);
-    recordBounds('dates', infoX - infoW / 2, infoY - infoSize * 0.8, infoW, infoSize);
+    const infoX = W / 2, infoY = rowY + 38;
+    drawVenueDateLine(infoParts, infoX, infoY, `500 ${infoSize}px ${FONT_STACK}`, '#fff', 'center', '   ／   ', 0.85, W - 2 * MARGIN);
   }
 
   // Sale-tag + price pills, bottom corner (mirrored for RTL), above
@@ -1964,13 +2001,12 @@ function renderCutoutTemplate() {
 
   useLayer('title');
   // ---- Title block, top-left, gradient fill ----
-  const lines = els.title.value.split('\n').map(s => s.trim()).filter(Boolean);
   const titleMaxW = W * 0.56;
   let cursorY = MARGIN + 70;
 
   const titleAdj = adj('title');
-  if (lines[0]) {
-    const headline = lines[0].toUpperCase();
+  const headline = els.title.value.trim().toUpperCase();
+  if (headline) {
     // Bounded by the art panel's left edge (titleMaxW = W*0.56) like the
     // catchphrase below. Wraps to up to 2 lines rather than shrinking to a
     // single crushed line (see fitFontSizeWrap) — still truncates as a last
@@ -2016,38 +2052,13 @@ function renderCutoutTemplate() {
     cursorY += (headlineFit.lines.length - 1) * lineH + size * 0.42;
   }
 
-  if (lines[1]) {
-    cursorY += 32;
-    drawSpacedText(lines[1].toUpperCase(), textLeft, cursorY, {
-      font: `600 22px ${FONT_STACK}`, spacing: 3, color: textHex, align: 'left'
-    });
-    cursorY += 8;
-  }
-
-  // Session subtitle: formal name (from title field, if any) on its own
-  // line, then venue/date(/price) on the next — each on its own layer.
-  const formalName = lines.slice(2).join(' ');
-  if (formalName) {
-    cursorY += 28;
-    useLayer('title');
-    const formalFont = `400 20px ${FONT_STACK}`;
-    const formalLines = wrapText(formalName, textColMaxW, formalFont).slice(0, 2);
-    ctx.font = formalFont;
-    ctx.fillStyle = textHex;
-    ctx.textAlign = 'left';
-    ctx.globalAlpha = 0.75;
-    formalLines.forEach((ln, i) => ctx.fillText(ln, textLeft, cursorY + i * 26));
-    ctx.globalAlpha = 1;
-    cursorY += (formalLines.length - 1) * 26;
-  }
   const sessionParts = buildInfoLineParts();
   if (sessionParts.length) {
     cursorY += 30;
     const datesAdj = adj('dates');
     const infoSize = Math.round(20 * datesAdj.scale / 100);
-    const infoX = textLeft + datesAdj.dx, infoY = cursorY + datesAdj.dy;
-    const infoW = drawInfoLine(sessionParts, infoX, infoY, `400 ${infoSize}px ${FONT_STACK}`, textHex, 'left', '　', 0.75, textColMaxW);
-    recordBounds('dates', infoX, infoY - infoSize * 0.8, infoW, infoSize);
+    const infoX = textLeft, infoY = cursorY;
+    drawVenueDateLine(sessionParts, infoX, infoY, `400 ${infoSize}px ${FONT_STACK}`, textHex, 'left', '　', 0.75, textColMaxW);
   }
   // ---- Catchphrase, bottom-left ----
   // Bounded by the art panel's left edge so it never runs under the character.
@@ -2235,8 +2246,7 @@ function renderVerticalTitleTemplate() {
 
   useLayer('title');
   // ---- Vertical title, right side ----
-  const lines = els.title.value.split('\n').map(s => s.trim()).filter(Boolean);
-  const titleText = lines[0] || '';
+  const titleText = els.title.value.trim();
   const isCjk = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
   const titleX = W - MARGIN - 30;
 
@@ -2262,12 +2272,13 @@ function renderVerticalTitleTemplate() {
       const colCapacity = (size) => Math.max(1, Math.floor(maxH / (size * lineStep)));
       let fontSize = 78;
       let cols;
-      if (titleText.includes('|') || titleText.includes('｜')) {
-        // Manual break — same "|"/"｜" convention as fitFontSizeWrap (see its
-        // comment), reimplemented here against character-count capacity
-        // instead of measured width, matching the char-count packing this
-        // branch already uses for the same reason (see comment above).
-        cols = titleText.split(/[|｜]/).map(s => s.trim()).filter(Boolean).slice(0, maxCols).map(s => [...s]);
+      if (/[|｜\n]/.test(titleText)) {
+        // Manual break — same "|"/"｜"/Enter convention as fitFontSizeWrap
+        // (see its comment), reimplemented here against character-count
+        // capacity instead of measured width, matching the char-count
+        // packing this branch already uses for the same reason (see comment
+        // above).
+        cols = titleText.split(/[|｜\n]/).map(s => s.trim()).filter(Boolean).slice(0, maxCols).map(s => [...s]);
         while (fontSize > 40 && cols.some(col => col.length > colCapacity(fontSize))) fontSize -= 4;
         const cap = colCapacity(fontSize);
         cols = cols.map(col => col.length <= cap ? col : col.slice(0, Math.max(1, cap - 1)).concat('…'));
@@ -2619,8 +2630,7 @@ function renderCyberUiTemplate() {
   // invisible, so a viewer scrolling past had no quick way to tell what the
   // banner was even for. The kicker keeps the HUD flavor; the headline
   // underneath is sized and weighted like every other template's title.
-  const lines = els.title.value.split('\n').map(s => s.trim()).filter(Boolean);
-  const titleText = (lines[0] || '').toUpperCase();
+  const titleText = els.title.value.trim().toUpperCase();
   const titleLeft = inset + bl + 14;
   const kickerY = inset + 8;
   const titleAdj = adj('title');
@@ -2708,9 +2718,8 @@ function renderCyberUiTemplate() {
   if (infoParts.length) {
     const datesAdj = adj('dates');
     const infoSize = Math.round(20 * datesAdj.scale / 100);
-    const infoX = W / 2 + datesAdj.dx, infoY = W - MARGIN - bl - 40 + datesAdj.dy;
-    const infoW = drawInfoLine(infoParts, infoX, infoY, `500 ${infoSize}px ${mono}`, accentHex, 'center', '   //   ', 0.9, W - 2 * MARGIN - 2 * bl);
-    recordBounds('dates', infoX - infoW / 2, infoY - infoSize * 0.8, infoW, infoSize);
+    const infoX = W / 2, infoY = W - MARGIN - bl - 40;
+    drawVenueDateLine(infoParts, infoX, infoY, `500 ${infoSize}px ${mono}`, accentHex, 'center', '   //   ', 0.9, W - 2 * MARGIN - 2 * bl);
   }
 
   // Sale-tag + price pills, bottom-right, above copyright — reads as a
