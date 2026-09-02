@@ -1303,14 +1303,14 @@ function renderCurrentLayout() {
     ctx.fillText(dateEndLabel, colLeft + datesAdj.dx, dateEndBaseline);
     let datesTop = dateStartBaseline - dateSize * 0.8;
 
-    // Slash connector — a short diagonal accent between the two date lines,
-    // sized relative to the date text next to it. This used to span the
-    // entire gap between the two baselines (~100px at default size), which
-    // read as an oversized bar rather than a typographic "/" accent —
-    // sized to roughly the text's cap-height and centered on the gap instead.
+    // Slash connector — a short diagonal accent, sized to roughly the date
+    // text's cap-height and sitting next to the START date (dateStartLabel)
+    // rather than centered in the gap between the two lines — centering on
+    // the gap visually read as attached to the END date instead, since the
+    // slash's own height falls mostly below its vertical midpoint.
     useLayer('decoration');
     if (dateStartLabel && dateEndLabel) {
-      const slashMidY = (dateStartBaseline + dateEndBaseline) / 2;
+      const slashMidY = dateStartBaseline - dateSize * 0.4;
       const slashHalfH = dateSize * 0.42;
       ctx.save();
       ctx.strokeStyle = textHex;
