@@ -454,6 +454,55 @@
     padding:2px 5px;
     border-radius:10px;
   }
+
+  /* ---- ⑥キャラクターラインナップ型: multi-image upload thumbnails ---- */
+  .lineup-thumb-grid{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:8px;
+    margin-top:10px;
+  }
+  .lineup-thumb-item{
+    position:relative;
+    border:2px solid var(--border);
+    border-radius:6px;
+    overflow:hidden;
+    aspect-ratio:1;
+    background:var(--panel-bg2);
+  }
+  .lineup-thumb-item img{
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    display:block;
+  }
+  .lineup-thumb-item .order-badge{
+    position:absolute;
+    top:3px; left:3px;
+    background:rgba(0,0,0,.65);
+    color:#fff;
+    font-size:10px;
+    font-weight:700;
+    padding:1px 6px;
+    border-radius:10px;
+  }
+  .lineup-thumb-item .remove-btn{
+    position:absolute;
+    top:3px; right:3px;
+    width:20px;
+    height:20px;
+    padding:0;
+    border:none;
+    border-radius:50%;
+    background:rgba(0,0,0,.65);
+    color:#fff;
+    font-size:11px;
+    line-height:1;
+    cursor:pointer;
+  }
+  .lineup-thumb-item .remove-btn:hover{
+    background:var(--accent);
+  }
   #batchGenerateBtn{
     background:var(--panel-bg2);
     color:var(--text);
@@ -751,6 +800,7 @@
         <option value="frame3">③ギャラリー型(汎用・素材をそのまま表示)</option>
         <option value="frame4">④スポットライト型(ヒーロー・特撮・重厚系)</option>
         <option value="cyberui5">⑤サイバーUI型(SF・近未来系)</option>
+        <option value="lineup">⑥キャラクターラインナップ型(アンサンブル・回顧展系)</option>
       </select>
       <label class="checkbox-row" style="margin-top:10px;">
         <input type="checkbox" id="autoTemplateCheckbox" checked>
@@ -804,6 +854,13 @@
       <legend>素材選定</legend>
       <input type="file" id="artFile" accept="image/*">
       <p class="hint">アップロードした画像はリサイズ・トリミング（配置調整）のみ行い、色調補正・加工は一切行いません。</p>
+
+      <div id="lineupUploadWrap" style="display:none;">
+        <label style="margin-top:16px;">⑥キャラクターラインナップ用素材（複数アップロード・最大6枚）</label>
+        <input type="file" id="lineupFile" accept="image/*" multiple>
+        <div id="lineupThumbGrid" class="lineup-thumb-grid"></div>
+        <p class="hint">複数の透過PNG（キャラクター切り抜き）を選択すると、アップロードした順に左から並びます。各サムネイルの✕で削除できます。全体の拡大縮小・位置調整は「レイアウト微調整」の「素材」欄でまとめて行います（1人ずつの個別調整は非対応）。この欄の画像は⑥のバナー本体にのみ使われ、配色抽出には使われません（配色は上の1枚アップロード欄、または下の色ピッカーで調整してください）。</p>
+      </div>
 
       <div class="drive-section">
         <p class="hint" id="driveSetupNote"></p>
@@ -1059,6 +1116,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=85"></script>
+<script src="app.js?v=86"></script>
 </body>
 </html>

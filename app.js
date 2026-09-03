@@ -322,6 +322,11 @@ function translateLangCode(appLangCode) {
 
 const state = {
   artImage: null,
+  // Separate from artImage — only used by ⑥キャラクターラインナップ型
+  // (renderLineupTemplate), which shows several character cutouts side by
+  // side rather than one photo/illustration. Each entry is
+  // {image: HTMLImageElement, name}. Capped at LINEUP_MAX_IMAGES.
+  lineupImages: [],
   logoImage: null,
   colors: {
     bg: { r: 245, g: 243, b: 238 },
@@ -496,6 +501,9 @@ const ctx = new Proxy({}, {
 
 const els = {
   artFile: document.getElementById('artFile'),
+  lineupUploadWrap: document.getElementById('lineupUploadWrap'),
+  lineupFile: document.getElementById('lineupFile'),
+  lineupThumbGrid: document.getElementById('lineupThumbGrid'),
   bgPicker: document.getElementById('bgColorPicker'),
   accentPicker: document.getElementById('accentColorPicker'),
   textPicker: document.getElementById('textColorPicker'),
@@ -1151,6 +1159,28 @@ function drawCoverImage(img, x, y, w, h, zoom = 1, panX = 0, panY = 0) {
   drawCoverImageTo(ctx, img, x, y, w, h, zoom, panX, panY);
 }
 
+// Fits the WHOLE image inside a box, preserving aspect ratio and never
+// cropping — unlike drawCoverImageTo, which crops to fill and would
+// unpredictably cut off heads/feet in a narrow per-character slot.
+// Anchored bottom-center, since ⑥キャラクターラインナップ型's whole point
+// is several full-body cutouts standing on a shared ground line. `zoom`
+// scales the fitted size up/down from that box-fit baseline, still anchored
+// to the box's bottom-center, so scaling up overlaps neighboring slots
+// rather than cropping the image itself. Returns the actually-drawn rect.
+function drawContainImageTo(context, img, x, y, w, h, zoom = 1) {
+  const ir = img.naturalWidth / img.naturalHeight;
+  const br = w / h;
+  let dw, dh;
+  if (ir > br) { dw = w; dh = w / ir; }
+  else { dh = h; dw = h * ir; }
+  dw *= Math.max(0.1, zoom);
+  dh *= Math.max(0.1, zoom);
+  const dx = x + (w - dw) / 2;
+  const dy = y + h - dh;
+  context.drawImage(img, dx, dy, dw, dh);
+  return { x: dx, y: dy, w: dw, h: dh };
+}
+
 // Renders the artwork into an offscreen canvas tinted a single flat color,
 // using the image's own alpha as a mask (source-in). For a transparent PNG
 // cutout this produces a true character silhouette; for an opaque photo/JPG
@@ -1192,6 +1222,7 @@ function render() {
   else if (state.template === 'cutout1') renderCutoutTemplate();
   else if (state.template === 'vertical2') renderVerticalTitleTemplate();
   else if (state.template === 'cyberui5') renderCyberUiTemplate();
+  else if (state.template === 'lineup') renderLineupTemplate();
   else renderCurrentLayout();
   compositeLayers();
 }
@@ -1577,6 +1608,50 @@ function drawArtworkPlain(outer) {
   return outer;
 }
 
+const LINEUP_MAX_IMAGES = 6;
+
+// Draws state.lineupImages side by side across [marginX, marginX+availW] ×
+// [top, bottom], for ⑥キャラクターラインナップ型 (renderLineupTemplate).
+// Each image gets an equal-width slot and is "contain"-fit (drawContainImageTo
+// — never cropped) so every full character stays visible, bottom-anchored to
+// a shared ground line. All images share ONE adjustment category ('art') —
+// scale/dx/dy move and resize the whole row together like a single group,
+// not per-character (matching how drawArtworkPlain's single panel works
+// everywhere else); recordBounds covers the row's full bounding box so
+// dragging on canvas grabs the group as one unit.
+function drawCharacterLineup(top, bottom, marginX, availW) {
+  useLayer('artwork');
+  const artAdj = adj('art');
+  const images = state.lineupImages;
+  if (!images.length) {
+    useLayer('decoration');
+    ctx.save();
+    ctx.strokeStyle = '#999';
+    ctx.setLineDash([10, 8]);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(marginX + 2, top + 2, availW - 4, (bottom - top) - 4);
+    ctx.fillStyle = '#999';
+    ctx.font = `400 18px ${FONT_STACK}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('複数のキャラクター素材をアップロード', marginX + availW / 2, top + (bottom - top) / 2);
+    ctx.restore();
+    return;
+  }
+  const slotW = availW / images.length;
+  const groupX = marginX + artAdj.dx;
+  const groupTop = top + artAdj.dy;
+  const groupBottom = bottom + artAdj.dy;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  images.forEach((entry, i) => {
+    const rect = drawContainImageTo(ctx, entry.image, groupX + i * slotW, groupTop, slotW, groupBottom - groupTop, artAdj.scale / 100);
+    minX = Math.min(minX, rect.x);
+    minY = Math.min(minY, rect.y);
+    maxX = Math.max(maxX, rect.x + rect.w);
+    maxY = Math.max(maxY, rect.y + rect.h);
+  });
+  recordBounds('art', minX, minY, maxX - minX, maxY - minY);
+}
+
 // Computes a picture-frame rect ({x,y,w,h}) centered in the vertical band
 // [top, bottom] and horizontal band of width `availW`, using a slightly
 // portrait aspect ratio like a real frame. Shared sizing logic for ③ and ④.
@@ -1763,6 +1838,174 @@ function renderFrameTemplate() {
 
   useLayer('extraText');
   // Additional free-text item — small print, defaults just above copyright.
+  if (els.extraText.value.trim()) {
+    const etAdj = adj('extraText');
+    ctx.save();
+    const etSize = Math.round(18 * etAdj.scale / 100);
+    ctx.font = `500 ${etSize}px ${FONT_STACK}`;
+    ctx.textAlign = 'right';
+    ctx.fillStyle = textHex;
+    ctx.globalAlpha = 0.6;
+    const etX = W - MARGIN + etAdj.dx;
+    const etY = W - 22 - 24 + etAdj.dy;
+    ctx.fillText(els.extraText.value, etX, etY);
+    const etW = ctx.measureText(els.extraText.value).width;
+    ctx.restore();
+    recordBounds('extraText', etX - etW, etY - etSize * 0.8, etW, etSize);
+  }
+}
+
+// ---------- Template 6: character lineup ----------
+// Same overall structure as ③ (title → venue/date line → bottom CTA row),
+// but the single framed artwork panel is replaced with several character
+// cutouts standing side by side — for ensemble-cast or retrospective
+// exhibitions where one piece of art can't represent the whole show. Uses
+// state.lineupImages (see drawCharacterLineup) instead of state.artImage.
+function renderLineupTemplate() {
+  const W = CANVAS_SIZE;
+  const MARGIN = 72;
+
+  const bg = state.colors.bg;
+  const accent = state.colors.accent;
+  const textColorAuto = pickTextColor(bg);
+  const textColor = state.textOverride || textColorAuto;
+  const textHex = rgbToHex(textColor);
+  const bandTextColor = pickTextColor(accent);
+  const bandTextHex = rgbToHex(bandTextColor);
+
+  ctx.clearRect(0, 0, W, W);
+
+  // Wall background — same subtle vertical gradient as ③, since this is
+  // another general-purpose, world-view-neutral layout that just swaps the
+  // single framed panel for an ensemble-cast row.
+  const wallGrad = ctx.createLinearGradient(0, 0, 0, W);
+  wallGrad.addColorStop(0, rgbToHex(lightenRgb(bg, 0.04)));
+  wallGrad.addColorStop(1, rgbToHex(darkenRgb(bg, 0.04)));
+  ctx.fillStyle = wallGrad;
+  ctx.fillRect(0, 0, W, W);
+
+  useLayer('decoration');
+  const logoAdj = adj('logo');
+  const tinted = tintedLogo(textHex, 34 * logoAdj.scale / 100);
+  if (tinted) {
+    if (!logoAdj.hidden) {
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.drawImage(tinted.canvas, MARGIN + logoAdj.dx, MARGIN - 6 + logoAdj.dy, tinted.w, tinted.h);
+      ctx.restore();
+    }
+    recordBounds('logo', MARGIN + logoAdj.dx, MARGIN - 6 + logoAdj.dy, tinted.w, tinted.h);
+  }
+
+  useLayer('title');
+  const headline = els.title.value.trim().toUpperCase();
+  let headerBottom = MARGIN + 30;
+  const titleAdj = adj('title');
+  if (headline) {
+    const isCjkTitle = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
+    const headlineFit = fitFontSizeWrap(headline, W - 2 * 140, 700, TITLE_FONT_STACK, 64, state.titleNoWrap ? 14 : 40, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
+    const size = headlineFit.size * titleAdj.scale / 100;
+    const lineH = size * 1.05;
+    const yStart = MARGIN + 60;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.18)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 2;
+    let headlineW = 0;
+    headlineFit.lines.forEach((ln, i) => {
+      const baseline = yStart + i * lineH + titleAdj.dy;
+      const w = drawSpacedText(ln, W / 2 + titleAdj.dx, baseline, { font: `700 ${size}px ${TITLE_FONT_STACK}`, spacing: 1, color: textHex, align: 'center' });
+      headlineW = Math.max(headlineW, w);
+    });
+    ctx.restore();
+    const blockH = (headlineFit.lines.length - 1) * lineH + size;
+    recordBounds('title', W / 2 + titleAdj.dx - headlineW / 2, yStart + titleAdj.dy - size * 0.8, headlineW, blockH);
+    headerBottom = yStart + (headlineFit.lines.length - 1) * lineH + 16;
+
+    useLayer('decoration');
+    const underlineW = 60;
+    ctx.fillStyle = rgbToHex(accent);
+    ctx.fillRect(W / 2 - underlineW / 2, headerBottom, underlineW, 3);
+    headerBottom += 28;
+  }
+
+  // venue / date line — same as ③ (drawVenueDateLine keeps venue and dates
+  // independently draggable/hideable, sharing this line's base position
+  // only as their default, undragged layout).
+  const infoParts = buildInfoLineParts();
+  if (infoParts.length) {
+    const datesAdj = adj('dates');
+    const infoSize = Math.round(24 * datesAdj.scale / 100);
+    const infoX = W / 2, infoY = headerBottom + 24;
+    drawVenueDateLine(infoParts, infoX, infoY, `500 ${infoSize}px ${FONT_STACK}`, textHex, 'center', '   ／   ', 0.7, W - 2 * MARGIN);
+    headerBottom += 52;
+  } else {
+    headerBottom += 10;
+  }
+
+  // ---- Bottom text row reserved space ----
+  const bottomBlockH = 132;
+  const bottomBlockTop = W - MARGIN - bottomBlockH;
+
+  // ---- Character row, filling the space between the header and the
+  // bottom text row (like ③'s single framed panel, but several contain-fit
+  // figures sharing one ground line instead of one cropped photo) ----
+  const rowTop = headerBottom + 24;
+  drawCharacterLineup(rowTop, bottomBlockTop - 10, MARGIN, W - 2 * MARGIN);
+
+  // ---- Bottom row: CTA pill, right-aligned (identical to ③) ----
+  const rowY = bottomBlockTop + bottomBlockH / 2;
+
+  const ctaSource = els.subCopy.value.trim() ? 'subCopy' : els.mainCopy.value.trim() ? 'mainCopy' : 'subCopy';
+  const ctaText = (els.subCopy.value || els.mainCopy.value).trim();
+  let ctaPillTop = rowY - 29;
+  if (ctaText) {
+    const ctaAdj = adj(ctaSource);
+    const padX = 26, padY = 16;
+    const ctaFit = fitFontSizeTruncate(ctaText, W - 2 * MARGIN - 2 * padX, 700, FONT_STACK, 26, 16, 0);
+    const ctaSize = ctaFit.size * ctaAdj.scale / 100;
+    ctx.font = `700 ${ctaSize}px ${FONT_STACK}`;
+    const ctaW = ctx.measureText(ctaFit.text).width;
+    const pillW = ctaW + padX * 2;
+    const pillH = ctaSize + padY * 2;
+    const pillX = W - MARGIN - pillW + ctaAdj.dx;
+    const pillY = rowY - pillH / 2 + ctaAdj.dy;
+    useLayer('decoration');
+    ctx.fillStyle = rgbToHex(accent);
+    roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+    ctx.fill();
+    useLayer(ctaSource);
+    ctx.fillStyle = bandTextHex;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ctaFit.text, pillX + padX, pillY + pillH / 2 + 1);
+    ctx.textBaseline = 'alphabetic';
+    recordBounds(ctaSource, pillX, pillY, pillW, pillH);
+    ctaPillTop = pillY;
+  }
+
+  if (state.bannerPurpose === 'sale') {
+    drawSaleBadges(W - MARGIN, ctaPillTop - 14, 'right', rgbToHex(accent), bandTextHex, 24);
+  }
+
+  useLayer('copyright');
+  if (els.copyright.value.trim()) {
+    const crAdj = adj('copyright');
+    ctx.save();
+    const crSize = Math.round(18 * crAdj.scale / 100);
+    ctx.font = `500 ${crSize}px ${FONT_STACK}`;
+    ctx.textAlign = 'right';
+    ctx.fillStyle = textHex;
+    ctx.globalAlpha = 0.6;
+    const crX = W - MARGIN + crAdj.dx;
+    const crY = W - 22 + crAdj.dy;
+    ctx.fillText(els.copyright.value, crX, crY);
+    const crW = ctx.measureText(els.copyright.value).width;
+    ctx.restore();
+    recordBounds('copyright', crX - crW, crY - crSize * 0.8, crW, crSize);
+  }
+
+  useLayer('extraText');
   if (els.extraText.value.trim()) {
     const etAdj = adj('extraText');
     ctx.save();
@@ -2835,9 +3078,22 @@ function renderCyberUiTemplate() {
 // it in the dropdown. Called after every (re-)extraction from the artwork.
 function maybeAutoSelectTemplate() {
   if (!els.autoTemplateCheckbox.checked) return;
+  // ⑥キャラクターラインナップ型 needs an explicit multi-image upload and is
+  // never a candidate classifyTemplateFromPalette() returns anyway — but
+  // without this guard, uploading a single reference image (for color
+  // extraction only) while ⑥ is selected would silently switch the
+  // template out from under the user's manual choice.
+  if (state.template === 'lineup') return;
   const picked = classifyTemplateFromPalette(state.colors.bg, state.colors.accent, state.colors.accentRaw);
   state.template = picked;
   els.templateSelect.value = picked;
+}
+
+// Whether there's enough artwork to generate a banner — the single
+// state.artImage every other template uses, or at least one lineup image
+// when ⑥キャラクターラインナップ型 is selected.
+function hasArtworkForExport() {
+  return state.template === 'lineup' ? state.lineupImages.length > 0 : !!state.artImage;
 }
 
 els.artFile.addEventListener('change', e => {
@@ -2862,6 +3118,78 @@ els.artFile.addEventListener('change', e => {
   reader.readAsDataURL(file);
 });
 
+// Rebuilds the ⑥キャラクターラインナップ型 thumbnail strip from
+// state.lineupImages — each thumb shows its position in the row (order
+// matches left-to-right draw order in drawCharacterLineup) and a remove
+// button. Called after every add/remove.
+function renderLineupThumbnails() {
+  els.lineupThumbGrid.innerHTML = '';
+  state.lineupImages.forEach((entry, i) => {
+    const item = document.createElement('div');
+    item.className = 'lineup-thumb-item';
+    const img = document.createElement('img');
+    img.src = entry.image.src;
+    img.alt = entry.name;
+    const order = document.createElement('span');
+    order.className = 'order-badge';
+    order.textContent = String(i + 1);
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕';
+    removeBtn.title = '削除';
+    removeBtn.addEventListener('click', () => {
+      state.lineupImages.splice(i, 1);
+      renderLineupThumbnails();
+      render();
+    });
+    item.appendChild(img);
+    item.appendChild(order);
+    item.appendChild(removeBtn);
+    els.lineupThumbGrid.appendChild(item);
+  });
+}
+
+// Shows/hides the ⑥ multi-upload section based on the current template.
+// Called at init and whenever the template dropdown changes.
+function applyTemplateUI() {
+  els.lineupUploadWrap.style.display = state.template === 'lineup' ? '' : 'none';
+}
+
+els.lineupFile.addEventListener('change', e => {
+  const room = Math.max(0, LINEUP_MAX_IMAGES - state.lineupImages.length);
+  const files = [...e.target.files].slice(0, room);
+  if (e.target.files.length > room) {
+    alert(`アップロードできるのは最大${LINEUP_MAX_IMAGES}枚までです。先に不要な画像を削除してから追加してください。`);
+  }
+  e.target.value = ''; // allow re-selecting the same file(s) later
+  if (!files.length) return;
+  // Loads happen in parallel (FileReader/Image are async), but images must
+  // land in the row in the order the user selected them, not load-finish
+  // order — collect into a same-length array and splice it in as one block
+  // once every file in THIS selection has finished loading.
+  const insertAt = state.lineupImages.length;
+  const loaded = new Array(files.length);
+  let remaining = files.length;
+  files.forEach((file, i) => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        loaded[i] = { image: img, name: file.name };
+        remaining -= 1;
+        if (remaining === 0) {
+          state.lineupImages.splice(insertAt, 0, ...loaded);
+          renderLineupThumbnails();
+          render();
+        }
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+});
+
 els.resetColors.addEventListener('click', () => {
   if (!state.artImage) return;
   const palette = extractPalette(state.artImage);
@@ -2879,6 +3207,7 @@ els.templateSelect.addEventListener('change', () => {
   // user re-enables it or uploads a new image.
   els.autoTemplateCheckbox.checked = false;
   state.template = els.templateSelect.value;
+  applyTemplateUI();
   render();
 });
 
@@ -3797,7 +4126,7 @@ function showLayerExportStatus(text, isError) {
 // the "アップロードしてください" placeholder would have been visible. Catch
 // it here instead.
 function confirmProceedWithoutArt() {
-  if (state.artImage) return true;
+  if (hasArtworkForExport()) return true;
   return confirm('素材がアップロードされていません（ページを再読み込みすると素材の選択はリセットされます）。このまま書き出しますか？');
 }
 
@@ -4487,7 +4816,7 @@ async function* iterateBatchVariants(sessions, langs) {
 }
 
 async function runBatchGenerate() {
-  if (!state.artImage) {
+  if (!hasArtworkForExport()) {
     els.batchStatus.classList.add('error');
     els.batchStatus.style.display = '';
     els.batchStatus.textContent = '素材をアップロードしてから実行してください。';
@@ -4615,7 +4944,7 @@ function closeBatchPreview() {
 }
 
 async function showBatchPreview() {
-  if (!state.artImage) {
+  if (!hasArtworkForExport()) {
     alert('素材をアップロードしてから実行してください。');
     return;
   }
@@ -5048,6 +5377,7 @@ logoImg.src = LOGO_DATA_URL;
 
 syncColorPickers();
 applyBannerPurposeUI();
+applyTemplateUI();
 initGoogleAuthUI();
 renderLangBar();
 renderTitleFontPicker();
