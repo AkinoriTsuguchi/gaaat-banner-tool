@@ -306,6 +306,10 @@
   .adjust-grid label{
     margin:0;
     color:var(--text);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:6px;
   }
   .adjust-grid input[type="number"]{
     width:100%;
@@ -317,6 +321,42 @@
     display:block;
     margin:0 auto;
     cursor:pointer;
+  }
+  .adjust-color-override{
+    display:inline-flex;
+    align-items:center;
+    gap:3px;
+    flex-shrink:0;
+  }
+  .adjust-grid input[type="color"]{
+    width:18px;
+    height:18px;
+    padding:0;
+    border:1px solid var(--border);
+    border-radius:4px;
+    background:none;
+    cursor:pointer;
+  }
+  .adjust-grid input[type="color"].active{
+    border-color:var(--accent);
+    box-shadow:0 0 0 1px var(--accent);
+  }
+  .adjust-color-override button{
+    width:auto;
+    padding:0 4px;
+    height:18px;
+    line-height:16px;
+    font-size:11px;
+    font-weight:400;
+    background:none;
+    border:1px solid var(--border);
+    border-radius:4px;
+    color:var(--muted);
+    cursor:pointer;
+  }
+  .adjust-color-override button:hover{
+    color:var(--text);
+    border-color:var(--muted);
   }
   .lang-add-row{
     display:flex;
@@ -952,6 +992,7 @@
         <label class="lang-toggle"><input type="checkbox" id="langToggle_subCopy" checked><span>言語別</span></label>
       </div>
       <input type="text" id="subCopyField" value="全国5都市開催">
+      <label class="lang-toggle"><input type="checkbox" id="subCopyNoWrapToggle" checked><span>1行に収める（自動改行しない・収まらない分は自動縮小）</span></label>
 
       <div class="field-label-row">
         <label>コピーライト（素材上に小さく表示）</label>
@@ -969,17 +1010,27 @@
 
     <fieldset>
       <legend>レイアウト微調整（版元指定など）</legend>
-      <p class="hint">監修で「ロゴをもう少し大きく」「タイトルを右にずらして」「サブコピーは無し」といった、この案件・このテンプレート固有の指摘が来たときに使います。テンプレートのコード自体は変えず、この案件のセッション内だけで有効な上書きです。「一括生成」にもそのまま反映されるので、都市×言語ぶん手作業でPSDを直す必要はありません。サイズは%（100=元のまま）、位置はpx（＋で右/下）、非表示にチェックするとその要素だけバナーから消えます（レイヤー分け出力には残るので後から復活も可能です）。キャンバス上で要素をドラッグして中央付近まで動かすと、ピンクのガイド線が出て自動的に中央に吸着します（Canvaなどと同じ操作感です）。</p>
+      <p class="hint">監修で「ロゴをもう少し大きく」「タイトルを右にずらして」「サブコピーは無し」といった、この案件・このテンプレート固有の指摘が来たときに使います。テンプレートのコード自体は変えず、この案件のセッション内だけで有効な上書きです。「一括生成」にもそのまま反映されるので、都市×言語ぶん手作業でPSDを直す必要はありません。サイズは%（100=元のまま）、位置はpx（＋で右/下）、非表示にチェックするとその要素だけバナーから消えます（レイヤー分け出力には残るので後から復活も可能です）。キャンバス上で要素をドラッグして中央付近まで動かすと、ピンクのガイド線が出て自動的に中央に吸着します（Canvaなどと同じ操作感です）。ロゴ・コピーライトの行にある色スウォッチで、この2要素だけ色を個別に指定できます（例: 背景の白い部分に動かしたら自動配色の白文字が見えなくなった、といった場合）。↺で自動配色（作品の世界観に合わせた自動選択）に戻せます。</p>
       <div class="adjust-grid">
         <span></span><span class="adjust-head">サイズ%</span><span class="adjust-head">横位置</span><span class="adjust-head">縦位置</span><span class="adjust-head">非表示</span>
 
-        <label for="adjLogoScale">ロゴ</label>
+        <label for="adjLogoScale">ロゴ
+          <span class="adjust-color-override">
+            <input type="color" id="adjLogoColor" value="#ffffff" title="色を指定（自動配色を上書き）">
+            <button type="button" id="adjLogoColorReset" title="自動配色に戻す">↺</button>
+          </span>
+        </label>
         <input type="number" id="adjLogoScale" value="100" step="5">
         <input type="number" id="adjLogoDx" value="0" step="1">
         <input type="number" id="adjLogoDy" value="0" step="1">
         <input type="checkbox" id="adjLogoHidden">
 
-        <label for="adjCopyrightScale">コピーライト</label>
+        <label for="adjCopyrightScale">コピーライト
+          <span class="adjust-color-override">
+            <input type="color" id="adjCopyrightColor" value="#ffffff" title="色を指定（自動配色を上書き）">
+            <button type="button" id="adjCopyrightColorReset" title="自動配色に戻す">↺</button>
+          </span>
+        </label>
         <input type="number" id="adjCopyrightScale" value="100" step="5">
         <input type="number" id="adjCopyrightDx" value="0" step="1">
         <input type="number" id="adjCopyrightDy" value="0" step="1">
@@ -1116,6 +1167,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=86"></script>
+<script src="app.js?v=87"></script>
 </body>
 </html>

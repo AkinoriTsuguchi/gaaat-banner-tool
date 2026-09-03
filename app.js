@@ -345,6 +345,7 @@ const state = {
   // titleFont, not per-language content, so not part of state.drafts.
   titleNoWrap: true,
   mainCopyNoWrap: true,
+  subCopyNoWrap: true,
   // 'venue' = 来場促進(集客用), 'sale' = オンライン販売用
   bannerPurpose: 'venue',
   googleAccessToken: null,
@@ -374,24 +375,29 @@ const state = {
   // are pixel offsets in the 1080×1080 canvas (positive = right/down). Not
   // persisted across a page reload, same as every other field here.
   adjustments: {
-    logo: { scale: 100, dx: 0, dy: 0, hidden: false },
-    copyright: { scale: 100, dx: 0, dy: 0, hidden: false },
-    title: { scale: 100, dx: 0, dy: 0, hidden: false },
-    mainCopy: { scale: 100, dx: 0, dy: 0, hidden: false },
-    subCopy: { scale: 100, dx: 0, dy: 0, hidden: false },
-    art: { scale: 100, dx: 0, dy: 0, hidden: false },
-    dates: { scale: 100, dx: 0, dy: 0, hidden: false },
-    extraText: { scale: 100, dx: 0, dy: 0, hidden: false },
+    // colorOverride is null (= use the template's auto-derived color) on
+    // every category for a uniform shape, but is only ever read for 'logo'
+    // and 'copyright' — the two elements a 版元 might drag onto a part of
+    // the banner where the automatic text color no longer has enough
+    // contrast (e.g. onto a locally light area of otherwise-dark artwork).
+    logo: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    copyright: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    title: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    mainCopy: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    subCopy: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    art: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    dates: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    extraText: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
     // Only ever populated in sale mode, by the price pill (see
     // drawSaleBadges) — plain venue-name text has never been individually
     // adjustable and still isn't. Named after the 'venue' layer it shares,
     // same precedent as 'logo' sharing the 'decoration' layer.
-    venue: { scale: 100, dx: 0, dy: 0, hidden: false },
+    venue: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
     // Sale-tag pill (see drawSaleBadges). Kept separate from 'dates' —
     // once end dates became optional-but-showable again in sale mode, the
     // venue/date info line and the sale-tag pill can appear at the same
     // time, so they need independent drag boxes and hide toggles.
-    saleTag: { scale: 100, dx: 0, dy: 0, hidden: false }
+    saleTag: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null }
   }
 };
 
@@ -399,7 +405,7 @@ const state = {
 // key is somehow missing instead of throwing, so a template can always do
 // `const a = adj('title')` without an existence check first.
 function adj(key) {
-  return state.adjustments[key] || { scale: 100, dx: 0, dy: 0, hidden: false };
+  return state.adjustments[key] || { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null };
 }
 
 // Bounding box (in native 1080×1080 canvas space) of each adjustable
@@ -513,6 +519,7 @@ const els = {
   titleFontPickerPanel: document.getElementById('titleFontPickerPanel'),
   titleNoWrapToggle: document.getElementById('titleNoWrapToggle'),
   mainCopyNoWrapToggle: document.getElementById('mainCopyNoWrapToggle'),
+  subCopyNoWrapToggle: document.getElementById('subCopyNoWrapToggle'),
   dateStart: document.getElementById('dateStart'),
   dateEnd: document.getElementById('dateEnd'),
   dateOverride: document.getElementById('dateOverrideField'),
@@ -1333,7 +1340,7 @@ function renderCurrentLayout() {
   const logoAnchorY = bandTop - 30;
   const logoBaseH = 40;
   const logoBottomY = logoAnchorY - logoBaseH;
-  const tinted = tintedLogo(textHex, logoBaseH * logoAdj.scale / 100);
+  const tinted = tintedLogo(logoAdj.colorOverride || textHex, logoBaseH * logoAdj.scale / 100);
   if (tinted) {
     const logoY = logoAnchorY - tinted.h + logoAdj.dy;
     if (!logoAdj.hidden) ctx.drawImage(tinted.canvas, colLeft + logoAdj.dx, logoY, tinted.w, tinted.h);
@@ -1483,8 +1490,18 @@ function renderCurrentLayout() {
     ctx.font = mainFont;
     mainLines = wrapText(mainCopy, bandTextMaxW, mainFont);
   }
-  ctx.font = subFont;
-  const subLines = subCopy ? wrapText(subCopy, bandTextMaxW, subFont) : [];
+  let subFontFinal = subFont;
+  let subLines;
+  if (!subCopy) {
+    subLines = [];
+  } else if (state.subCopyNoWrap) {
+    const subFit = fitFontSizeTruncate(subCopy, bandTextMaxW, 400, FONT_STACK, 28, 10, 0);
+    subFontFinal = `400 ${subFit.size * subCopyAdj.scale / 100}px ${FONT_STACK}`;
+    subLines = [subFit.text];
+  } else {
+    ctx.font = subFont;
+    subLines = wrapText(subCopy, bandTextMaxW, subFont);
+  }
 
   const lineH1 = 48, lineH2 = 36, gapBetween = 8;
   const blockH = mainLines.length * lineH1 + (subLines.length ? gapBetween + subLines.length * lineH2 : 0);
@@ -1501,7 +1518,7 @@ function renderCurrentLayout() {
     ty += gapBetween - lineH1 + lineH2 * 0.75;
     useLayer('subCopy');
     ctx.fillStyle = bandTextHex;
-    ctx.font = subFont;
+    ctx.font = subFontFinal;
     const subTop = ty - lineH2 * 0.75;
     const subW = Math.max(1, ...subLines.map(ln => ctx.measureText(ln).width));
     subLines.forEach(ln => { ctx.fillText(ln, bandTextX + subCopyAdj.dx, ty + subCopyAdj.dy); ty += lineH2; });
@@ -1516,7 +1533,7 @@ function renderCurrentLayout() {
     ctx.save();
     ctx.font = `500 ${crSize}px ${FONT_STACK}`;
     ctx.textAlign = 'right';
-    ctx.fillStyle = bandTextHex;
+    ctx.fillStyle = crAdj.colorOverride || bandTextHex;
     ctx.globalAlpha = 0.7;
     const crX = W - MARGIN + crAdj.dx, crY = W - 24 + crAdj.dy;
     const crW = ctx.measureText(els.copyright.value).width;
@@ -1699,7 +1716,7 @@ function renderFrameTemplate() {
   useLayer('decoration');
   // Small logo, top-left, subtle
   const logoAdj = adj('logo');
-  const tinted = tintedLogo(textHex, 34 * logoAdj.scale / 100);
+  const tinted = tintedLogo(logoAdj.colorOverride || textHex, 34 * logoAdj.scale / 100);
   if (tinted) {
     if (!logoAdj.hidden) {
       ctx.save();
@@ -1826,7 +1843,7 @@ function renderFrameTemplate() {
     const crSize = Math.round(18 * crAdj.scale / 100);
     ctx.font = `500 ${crSize}px ${FONT_STACK}`;
     ctx.textAlign = 'right';
-    ctx.fillStyle = textHex;
+    ctx.fillStyle = crAdj.colorOverride || textHex;
     ctx.globalAlpha = 0.6;
     const crX = W - MARGIN + crAdj.dx;
     const crY = W - 22 + crAdj.dy;
@@ -1886,7 +1903,7 @@ function renderLineupTemplate() {
 
   useLayer('decoration');
   const logoAdj = adj('logo');
-  const tinted = tintedLogo(textHex, 34 * logoAdj.scale / 100);
+  const tinted = tintedLogo(logoAdj.colorOverride || textHex, 34 * logoAdj.scale / 100);
   if (tinted) {
     if (!logoAdj.hidden) {
       ctx.save();
@@ -1995,7 +2012,7 @@ function renderLineupTemplate() {
     const crSize = Math.round(18 * crAdj.scale / 100);
     ctx.font = `500 ${crSize}px ${FONT_STACK}`;
     ctx.textAlign = 'right';
-    ctx.fillStyle = textHex;
+    ctx.fillStyle = crAdj.colorOverride || textHex;
     ctx.globalAlpha = 0.6;
     const crX = W - MARGIN + crAdj.dx;
     const crY = W - 22 + crAdj.dy;
@@ -2068,7 +2085,7 @@ function renderSpotlightFrameTemplate() {
   useLayer('decoration');
   // Logo — top-right, mirrored to top-left for RTL
   const logoAdj = adj('logo');
-  const tinted = tintedLogo('#ffffff', 36 * logoAdj.scale / 100);
+  const tinted = tintedLogo(logoAdj.colorOverride || '#ffffff', 36 * logoAdj.scale / 100);
   if (tinted) {
     const lx = (isRtl ? MARGIN : W - MARGIN - tinted.w) + logoAdj.dx;
     const ly = MARGIN - 4 + logoAdj.dy;
@@ -2193,7 +2210,7 @@ function renderSpotlightFrameTemplate() {
     const crAdj = adj('copyright');
     const crSize = Math.round(18 * crAdj.scale / 100);
     ctx.font = `500 ${crSize}px ${FONT_STACK}`;
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = crAdj.colorOverride || '#fff';
     ctx.globalAlpha = 0.6;
     ctx.textAlign = isRtl ? 'left' : 'right';
     const crX = (isRtl ? MARGIN : W - MARGIN) + crAdj.dx;
@@ -2385,8 +2402,18 @@ function renderCutoutTemplate() {
     ctx.font = mainFont;
     mainLines = wrapFn(mainCopy, copyMaxW, mainFont);
   }
-  ctx.font = subFont;
-  const subLines = subCopy ? wrapFn(subCopy, copyMaxW, subFont) : [];
+  let subFontFinal = subFont;
+  let subLines;
+  if (!subCopy) {
+    subLines = [];
+  } else if (state.subCopyNoWrap) {
+    const subFit = fitFontSizeTruncate(subCopy, copyMaxW, 400, FONT_STACK, 24, 10, 0);
+    subFontFinal = `400 ${subFit.size * subCopyAdj.scale / 100}px ${FONT_STACK}`;
+    subLines = [subFit.text];
+  } else {
+    ctx.font = subFont;
+    subLines = wrapFn(subCopy, copyMaxW, subFont);
+  }
 
   const lineH1 = 46, lineH2 = 32, gapBetween = 10;
   const blockH = mainLines.length * lineH1 + (subLines.length ? gapBetween + subLines.length * lineH2 : 0);
@@ -2408,7 +2435,7 @@ function renderCutoutTemplate() {
     useLayer('subCopy');
     ctx.textAlign = 'left';
     ctx.fillStyle = textHex;
-    ctx.font = subFont;
+    ctx.font = subFontFinal;
     ctx.globalAlpha = 0.75;
     const subStartTy = ty;
     subLines.forEach(ln => { ctx.fillText(ln, textLeft + subCopyAdj.dx, ty + subCopyAdj.dy); ty += lineH2; });
@@ -2418,11 +2445,17 @@ function renderCutoutTemplate() {
     recordBounds('subCopy', textLeft + subCopyAdj.dx, subStartTy + subCopyAdj.dy - subSize * 0.8, subW, subLines.length * lineH2);
   }
 
-  // Sale-tag + price pills, bottom-right, stacked above the logo/copyright
-  // cluster below — the pills carry their own solid background, so unlike
-  // plain text they don't need the corner scrim for contrast.
+  // Sale-tag + price pills, top-right corner — the character art bleeds off
+  // the right/bottom edges (see artCx/artCy/artW/artH above), so almost the
+  // entire bottom-right two-thirds of the canvas IS the artwork; a
+  // bottom-right badge used to sit directly on top of the character. The
+  // logo/copyright cluster in that same corner gets away with it only
+  // because of the dedicated radial scrim behind it (see below) — the badge
+  // has no such scrim, so it goes in the one corner clear of both the
+  // artwork (which starts at artCy - artH/2 ≈ y=205) and the title (bounded
+  // to titleMaxW on the left) instead.
   if (state.bannerPurpose === 'sale') {
-    drawSaleBadges(W - MARGIN, W - 170, 'right', accentHex, rgbToHex(pickTextColor(accent)), 20);
+    drawSaleBadges(W - MARGIN, MARGIN, 'right', accentHex, rgbToHex(pickTextColor(accent)), 20, 'top');
   }
 
   // ---- Logo + copyright, fixed bottom-right ----
@@ -2440,7 +2473,7 @@ function renderCutoutTemplate() {
   }
   const cornerTextColor = state.artImage ? '#ffffff' : textHex;
   const logoAdj = adj('logo');
-  const tinted = tintedLogo(cornerTextColor, 30 * logoAdj.scale / 100);
+  const tinted = tintedLogo(logoAdj.colorOverride || cornerTextColor, 30 * logoAdj.scale / 100);
   if (tinted) {
     const lx = W - MARGIN - tinted.w + logoAdj.dx;
     const ly = W - MARGIN - tinted.h - 22 + logoAdj.dy;
@@ -2458,7 +2491,7 @@ function renderCutoutTemplate() {
     const crSize = Math.round(18 * crAdj.scale / 100);
     ctx.font = `500 ${crSize}px ${FONT_STACK}`;
     ctx.textAlign = 'right';
-    ctx.fillStyle = cornerTextColor;
+    ctx.fillStyle = crAdj.colorOverride || cornerTextColor;
     ctx.globalAlpha = 0.8;
     const crX = W - MARGIN + crAdj.dx;
     const crY = W - MARGIN + 4 + crAdj.dy;
@@ -2694,7 +2727,7 @@ function renderVerticalTitleTemplate() {
   useLayer('decoration');
   // ---- Logo top-left ----
   const logoAdj = adj('logo');
-  const tinted = tintedLogo(white, 32 * logoAdj.scale / 100);
+  const tinted = tintedLogo(logoAdj.colorOverride || white, 32 * logoAdj.scale / 100);
   if (tinted) {
     const lx = MARGIN + logoAdj.dx, ly = MARGIN + logoAdj.dy;
     if (!logoAdj.hidden) {
@@ -2796,7 +2829,7 @@ function renderVerticalTitleTemplate() {
     const crSize = Math.round(18 * crAdj.scale / 100);
     ctx.font = `500 ${crSize}px ${FONT_STACK}`;
     ctx.textAlign = 'left';
-    ctx.fillStyle = white;
+    ctx.fillStyle = crAdj.colorOverride || white;
     ctx.globalAlpha = 0.7;
     const crX = MARGIN + crAdj.dx, crY = W - 20 + crAdj.dy;
     ctx.fillText(els.copyright.value, crX, crY);
@@ -3043,7 +3076,7 @@ function renderCyberUiTemplate() {
     const crAdj = adj('copyright');
     const crSize = Math.round(15 * crAdj.scale / 100);
     ctx.font = `400 ${crSize}px ${mono}`;
-    ctx.fillStyle = white;
+    ctx.fillStyle = crAdj.colorOverride || white;
     ctx.textAlign = 'right';
     ctx.globalAlpha = 0.55;
     const crX = W - inset - bl - 14 + crAdj.dx;
@@ -3238,10 +3271,19 @@ function syncAdjustmentInputs(cat) {
   const dxEl = document.getElementById(idBase + 'Dx');
   const dyEl = document.getElementById(idBase + 'Dy');
   const hiddenEl = document.getElementById(idBase + 'Hidden');
+  const colorEl = document.getElementById(idBase + 'Color');
   if (scaleEl) scaleEl.value = a.scale;
   if (dxEl) dxEl.value = a.dx;
   if (dyEl) dyEl.value = a.dy;
   if (hiddenEl) hiddenEl.checked = !!a.hidden;
+  if (colorEl) {
+    // <input type=color> always holds SOME hex value even with no override
+    // set — the "active" class is what actually distinguishes "manually
+    // overridden" from "still following the template's auto color" (the
+    // swatch just shows a neutral placeholder in the latter case).
+    colorEl.value = a.colorOverride || '#ffffff';
+    colorEl.classList.toggle('active', !!a.colorOverride);
+  }
 }
 
 // ---------- Undo/redo for adjustments ----------
@@ -3374,12 +3416,36 @@ ADJUSTMENT_CATEGORIES.forEach(cat => {
       render();
     });
   }
+  // Only 'logo' and 'copyright' actually have these two elements in the
+  // HTML (see the adjust-grid markup) — every other category's lookup here
+  // is just a harmless null, same pattern as the other optional elements
+  // above.
+  const colorEl = document.getElementById(idBase + 'Color');
+  if (colorEl) {
+    colorEl.addEventListener('input', () => {
+      recordAdjustmentChange();
+      state.adjustments[cat].colorOverride = colorEl.value;
+      colorEl.classList.add('active');
+      commitAdjustmentUndoGroup();
+      render();
+    });
+  }
+  const colorResetEl = document.getElementById(idBase + 'ColorReset');
+  if (colorResetEl) {
+    colorResetEl.addEventListener('click', () => {
+      recordAdjustmentChange();
+      state.adjustments[cat].colorOverride = null;
+      syncAdjustmentInputs(cat);
+      commitAdjustmentUndoGroup();
+      render();
+    });
+  }
 });
 
 els.resetAdjustmentsBtn.addEventListener('click', () => {
   recordAdjustmentChange();
   ADJUSTMENT_CATEGORIES.forEach(cat => {
-    state.adjustments[cat] = { scale: 100, dx: 0, dy: 0, hidden: false };
+    state.adjustments[cat] = { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null };
     syncAdjustmentInputs(cat);
   });
   commitAdjustmentUndoGroup();
@@ -3469,8 +3535,8 @@ els.loadAdjustPresetBtn.addEventListener('click', () => {
   ADJUSTMENT_CATEGORIES.forEach(cat => {
     const saved = preset[cat];
     state.adjustments[cat] = saved
-      ? { scale: saved.scale ?? 100, dx: saved.dx ?? 0, dy: saved.dy ?? 0, hidden: !!saved.hidden }
-      : { scale: 100, dx: 0, dy: 0, hidden: false };
+      ? { scale: saved.scale ?? 100, dx: saved.dx ?? 0, dy: saved.dy ?? 0, hidden: !!saved.hidden, colorOverride: saved.colorOverride ?? null }
+      : { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null };
     syncAdjustmentInputs(cat);
   });
   commitAdjustmentUndoGroup();
@@ -3954,6 +4020,10 @@ els.titleNoWrapToggle.addEventListener('change', () => {
 });
 els.mainCopyNoWrapToggle.addEventListener('change', () => {
   state.mainCopyNoWrap = els.mainCopyNoWrapToggle.checked;
+  render();
+});
+els.subCopyNoWrapToggle.addEventListener('change', () => {
+  state.subCopyNoWrap = els.subCopyNoWrapToggle.checked;
   render();
 });
 
