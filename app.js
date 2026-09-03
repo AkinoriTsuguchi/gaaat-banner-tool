@@ -784,7 +784,7 @@ function drawVenueDateLine(parts, x, y, font, color, align, separator, alpha = 1
     const pAdj = adj(p.layer);
     useLayer(p.layer);
     ctx.font = font;
-    ctx.fillStyle = color;
+    ctx.fillStyle = pAdj.colorOverride || color;
     ctx.textAlign = 'left';
     ctx.globalAlpha = alpha;
     const px = cursorX + pAdj.dx, py = y + pAdj.dy;
@@ -886,7 +886,7 @@ function drawSaleBadges(x, anchorY, align, accentHex, fgHex = '#ffffff', baseSiz
       useLayer('saleTag');
       const tagSize = baseSize * tagAdj.scale / 100;
       const pill = drawPill(x + tagAdj.dx, cursorTop + tagAdj.dy, tagText, {
-        font: `700 ${tagSize}px ${FONT_STACK}`, bg: accentHex, fg: fgHex, align, hidden: tagAdj.hidden
+        font: `700 ${tagSize}px ${FONT_STACK}`, bg: accentHex, fg: tagAdj.colorOverride || fgHex, align, hidden: tagAdj.hidden
       });
       recordBounds('saleTag', pill.x, pill.y, pill.w, pill.h);
       cursorTop = pill.y + pill.h + 10 - tagAdj.dy;
@@ -896,7 +896,7 @@ function drawSaleBadges(x, anchorY, align, accentHex, fgHex = '#ffffff', baseSiz
       useLayer('venue');
       const priceSize = baseSize * venueAdj.scale / 100;
       const pill = drawPill(x + venueAdj.dx, cursorTop + venueAdj.dy, priceText, {
-        font: `700 ${priceSize}px ${FONT_STACK}`, bg: '#ffffff', fg: '#16171a', align, hidden: venueAdj.hidden
+        font: `700 ${priceSize}px ${FONT_STACK}`, bg: '#ffffff', fg: venueAdj.colorOverride || '#16171a', align, hidden: venueAdj.hidden
       });
       recordBounds('venue', pill.x, pill.y, pill.w, pill.h);
       bottom = pill.y + pill.h;
@@ -910,7 +910,7 @@ function drawSaleBadges(x, anchorY, align, accentHex, fgHex = '#ffffff', baseSiz
     useLayer('venue');
     const priceSize = baseSize * venueAdj.scale / 100;
     const pill = drawPill(x + venueAdj.dx, cursorBottom - (priceSize + priceSize * 0.42 * 2) + venueAdj.dy, priceText, {
-      font: `700 ${priceSize}px ${FONT_STACK}`, bg: '#ffffff', fg: '#16171a', align, hidden: venueAdj.hidden
+      font: `700 ${priceSize}px ${FONT_STACK}`, bg: '#ffffff', fg: venueAdj.colorOverride || '#16171a', align, hidden: venueAdj.hidden
     });
     recordBounds('venue', pill.x, pill.y, pill.w, pill.h);
     cursorBottom = pill.y - 10 - venueAdj.dy;
@@ -920,7 +920,7 @@ function drawSaleBadges(x, anchorY, align, accentHex, fgHex = '#ffffff', baseSiz
     useLayer('saleTag');
     const tagSize = baseSize * tagAdj.scale / 100;
     const pill = drawPill(x + tagAdj.dx, cursorBottom - (tagSize + tagSize * 0.42 * 2) + tagAdj.dy, tagText, {
-      font: `700 ${tagSize}px ${FONT_STACK}`, bg: accentHex, fg: fgHex, align, hidden: tagAdj.hidden
+      font: `700 ${tagSize}px ${FONT_STACK}`, bg: accentHex, fg: tagAdj.colorOverride || fgHex, align, hidden: tagAdj.hidden
     });
     recordBounds('saleTag', pill.x, pill.y, pill.w, pill.h);
     top = pill.y;
@@ -1283,7 +1283,7 @@ function renderCurrentLayout() {
     titleFit.lines.forEach((ln, i) => {
       const baseline = titleStartY + i * titleLineH + titleAdj.dy;
       const w = drawSpacedText(ln, W / 2 + titleAdj.dx, baseline, {
-        font: `700 ${size}px ${TITLE_FONT_STACK}`, spacing: 1, color: textHex, align: 'center'
+        font: `700 ${size}px ${TITLE_FONT_STACK}`, spacing: 1, color: titleAdj.colorOverride || textHex, align: 'center'
       });
       titleBlockW = Math.max(titleBlockW, w);
     });
@@ -1365,7 +1365,7 @@ function renderCurrentLayout() {
   const venueBaseline = venueBaselineBase + venueAdj.dy;
   if (venueText) {
     ctx.font = `700 ${venueSize}px ${FONT_STACK}`;
-    ctx.fillStyle = rgbToHex(accent);
+    ctx.fillStyle = venueAdj.colorOverride || rgbToHex(accent);
     ctx.textAlign = 'left';
     if (!venueAdj.hidden) ctx.fillText(venueFit.text, colLeft + venueAdj.dx, venueBaseline);
     const venueW = ctx.measureText(venueFit.text).width;
@@ -1391,7 +1391,7 @@ function renderCurrentLayout() {
       ctx.font = `800 ${dateSize}px ${FONT_STACK}`;
       const dateBaseline = logoBottomY - 22 + datesAdj.dy;
       const dateW = ctx.measureText(dateFit.text).width;
-      ctx.fillStyle = textHex;
+      ctx.fillStyle = datesAdj.colorOverride || textHex;
       ctx.textAlign = 'left';
       ctx.fillText(dateFit.text, colLeft + datesAdj.dx, dateBaseline);
       recordBounds('dates', colLeft + datesAdj.dx, dateBaseline - dateSize * 0.8, dateW, dateSize);
@@ -1425,7 +1425,7 @@ function renderCurrentLayout() {
     ctx.font = `800 ${overrideSize}px ${FONT_STACK}`;
     const overrideBaseline = venueBaselineBase - 52 + datesAdj.dy;
     const overrideW = ctx.measureText(overrideFit.text).width;
-    ctx.fillStyle = textHex;
+    ctx.fillStyle = datesAdj.colorOverride || textHex;
     ctx.textAlign = 'left';
     ctx.fillText(overrideFit.text, colLeft + datesAdj.dx, overrideBaseline);
     recordBounds('dates', colLeft + datesAdj.dx, overrideBaseline - overrideSize * 0.8, overrideW, overrideSize);
@@ -1437,7 +1437,7 @@ function renderCurrentLayout() {
     const dateEndBaseline = venueBaselineBase - 52 + datesAdj.dy;
     const dateStartBaseline = dateEndBaseline - lineGap;
 
-    ctx.fillStyle = textHex;
+    ctx.fillStyle = datesAdj.colorOverride || textHex;
     ctx.textAlign = 'left';
     ctx.fillText(dateStartLabel, colLeft + datesAdj.dx, dateStartBaseline);
     ctx.fillText(dateEndLabel, colLeft + datesAdj.dx, dateEndBaseline);
@@ -1454,7 +1454,7 @@ function renderCurrentLayout() {
     useLayer('decoration');
     if (dateStartLabel && dateEndLabel) {
       ctx.font = dateFont;
-      ctx.fillStyle = textHex;
+      ctx.fillStyle = datesAdj.colorOverride || textHex;
       ctx.textAlign = 'left';
       ctx.fillText('/', colLeft + datesAdj.dx + startW + 6, dateStartBaseline);
     }
@@ -1508,7 +1508,7 @@ function renderCurrentLayout() {
   let ty = bandCenterY - blockH / 2 + lineH1 * 0.78;
 
   useLayer('mainCopy');
-  ctx.fillStyle = bandTextHex;
+  ctx.fillStyle = mainCopyAdj.colorOverride || bandTextHex;
   ctx.font = mainFont;
   const mainTop = ty - lineH1 * 0.78;
   const mainW = Math.max(1, ...mainLines.map(ln => ctx.measureText(ln).width));
@@ -1517,7 +1517,7 @@ function renderCurrentLayout() {
   if (subLines.length) {
     ty += gapBetween - lineH1 + lineH2 * 0.75;
     useLayer('subCopy');
-    ctx.fillStyle = bandTextHex;
+    ctx.fillStyle = subCopyAdj.colorOverride || bandTextHex;
     ctx.font = subFontFinal;
     const subTop = ty - lineH2 * 0.75;
     const subW = Math.max(1, ...subLines.map(ln => ctx.measureText(ln).width));
@@ -1562,7 +1562,7 @@ function renderCurrentLayout() {
     ctx.save();
     ctx.font = `500 ${etSize}px ${FONT_STACK}`;
     ctx.textAlign = 'right';
-    ctx.fillStyle = bandTextHex;
+    ctx.fillStyle = etAdj.colorOverride || bandTextHex;
     ctx.globalAlpha = 0.7;
     const etX = W - MARGIN + etAdj.dx, etY = W - 24 - 26 + etAdj.dy;
     const etW = ctx.measureText(els.extraText.value).width;
@@ -1748,7 +1748,7 @@ function renderFrameTemplate() {
     let headlineW = 0;
     headlineFit.lines.forEach((ln, i) => {
       const baseline = yStart + i * lineH + titleAdj.dy;
-      const w = drawSpacedText(ln, W / 2 + titleAdj.dx, baseline, { font: `700 ${size}px ${TITLE_FONT_STACK}`, spacing: 1, color: textHex, align: 'center' });
+      const w = drawSpacedText(ln, W / 2 + titleAdj.dx, baseline, { font: `700 ${size}px ${TITLE_FONT_STACK}`, spacing: 1, color: titleAdj.colorOverride || textHex, align: 'center' });
       headlineW = Math.max(headlineW, w);
     });
     ctx.restore();
@@ -1819,7 +1819,7 @@ function renderFrameTemplate() {
     roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
     ctx.fill();
     useLayer(ctaSource);
-    ctx.fillStyle = bandTextHex;
+    ctx.fillStyle = ctaAdj.colorOverride || bandTextHex;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(ctaFit.text, pillX + padX, pillY + pillH / 2 + 1);
@@ -1861,7 +1861,7 @@ function renderFrameTemplate() {
     const etSize = Math.round(18 * etAdj.scale / 100);
     ctx.font = `500 ${etSize}px ${FONT_STACK}`;
     ctx.textAlign = 'right';
-    ctx.fillStyle = textHex;
+    ctx.fillStyle = etAdj.colorOverride || textHex;
     ctx.globalAlpha = 0.6;
     const etX = W - MARGIN + etAdj.dx;
     const etY = W - 22 - 24 + etAdj.dy;
@@ -1931,7 +1931,7 @@ function renderLineupTemplate() {
     let headlineW = 0;
     headlineFit.lines.forEach((ln, i) => {
       const baseline = yStart + i * lineH + titleAdj.dy;
-      const w = drawSpacedText(ln, W / 2 + titleAdj.dx, baseline, { font: `700 ${size}px ${TITLE_FONT_STACK}`, spacing: 1, color: textHex, align: 'center' });
+      const w = drawSpacedText(ln, W / 2 + titleAdj.dx, baseline, { font: `700 ${size}px ${TITLE_FONT_STACK}`, spacing: 1, color: titleAdj.colorOverride || textHex, align: 'center' });
       headlineW = Math.max(headlineW, w);
     });
     ctx.restore();
@@ -1992,7 +1992,7 @@ function renderLineupTemplate() {
     roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
     ctx.fill();
     useLayer(ctaSource);
-    ctx.fillStyle = bandTextHex;
+    ctx.fillStyle = ctaAdj.colorOverride || bandTextHex;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(ctaFit.text, pillX + padX, pillY + pillH / 2 + 1);
@@ -2029,7 +2029,7 @@ function renderLineupTemplate() {
     const etSize = Math.round(18 * etAdj.scale / 100);
     ctx.font = `500 ${etSize}px ${FONT_STACK}`;
     ctx.textAlign = 'right';
-    ctx.fillStyle = textHex;
+    ctx.fillStyle = etAdj.colorOverride || textHex;
     ctx.globalAlpha = 0.6;
     const etX = W - MARGIN + etAdj.dx;
     const etY = W - 22 - 24 + etAdj.dy;
@@ -2123,7 +2123,7 @@ function renderSpotlightFrameTemplate() {
       ctx.shadowOffsetY = 6;
       ctx.strokeText(ln, W / 2 + titleAdj.dx, baseline);
       ctx.shadowBlur = 0;
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = titleAdj.colorOverride || '#fff';
       ctx.fillText(ln, W / 2 + titleAdj.dx, baseline);
       titleW = Math.max(titleW, ctx.measureText(ln).width);
     });
@@ -2148,7 +2148,7 @@ function renderSpotlightFrameTemplate() {
     }
     ctx.font = font;
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = mainCopyAdj.colorOverride || '#fff';
     ctx.globalAlpha = 0.92;
     cursorY += 36;
     subLines.forEach((ln, i) => ctx.fillText(ln, W / 2 + mainCopyAdj.dx, cursorY + i * 38 + mainCopyAdj.dy));
@@ -2178,7 +2178,7 @@ function renderSpotlightFrameTemplate() {
     const subCopyAdj = adj('subCopy');
     const ctaFit = fitFontSizeTruncate(ctaText, W - 2 * MARGIN, 800, FONT_STACK, 40, 24, 0);
     ctx.font = `800 ${ctaFit.size * subCopyAdj.scale / 100}px ${FONT_STACK}`;
-    ctx.fillStyle = accentHex;
+    ctx.fillStyle = subCopyAdj.colorOverride || accentHex;
     ctx.textAlign = 'center';
     ctx.shadowColor = 'rgba(0,0,0,0.5)';
     ctx.shadowBlur = 10;
@@ -2228,7 +2228,7 @@ function renderSpotlightFrameTemplate() {
     const etAdj = adj('extraText');
     const etSize = Math.round(18 * etAdj.scale / 100);
     ctx.font = `500 ${etSize}px ${FONT_STACK}`;
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = etAdj.colorOverride || '#fff';
     ctx.globalAlpha = 0.6;
     ctx.textAlign = isRtl ? 'left' : 'right';
     const etX = (isRtl ? MARGIN : W - MARGIN) + etAdj.dx;
@@ -2343,9 +2343,16 @@ function renderCutoutTemplate() {
     const size = headlineFit.size * titleAdj.scale / 100;
     const lineH = size * 1.05;
     ctx.font = `700 ${size}px ${TITLE_FONT_STACK}`;
-    const grad = ctx.createLinearGradient(textLeft, 0, textLeft + titleMaxW, 0);
-    grad.addColorStop(0, accentHex);
-    grad.addColorStop(1, rgbToHex(lightenRgb(accent, 0.35)));
+    // A manual color override replaces the gradient with a flat fill —
+    // gradient vs. solid isn't something a single color picker can express,
+    // so an override just wins outright.
+    let titleFill = titleAdj.colorOverride;
+    if (!titleFill) {
+      const grad = ctx.createLinearGradient(textLeft, 0, textLeft + titleMaxW, 0);
+      grad.addColorStop(0, accentHex);
+      grad.addColorStop(1, rgbToHex(lightenRgb(accent, 0.35)));
+      titleFill = grad;
+    }
     ctx.textAlign = 'left';
     // Real GAAAT cutout-style banners consistently give this kind of bold
     // title a dark outline + drop shadow — it reads as "poster lettering"
@@ -2364,7 +2371,7 @@ function renderCutoutTemplate() {
       ctx.strokeText(ln, textLeft + titleAdj.dx, baseline);
       ctx.shadowBlur = 0;
       ctx.shadowOffsetY = 0;
-      ctx.fillStyle = grad;
+      ctx.fillStyle = titleFill;
       ctx.fillText(ln, textLeft + titleAdj.dx, baseline);
       headlineW = Math.max(headlineW, ctx.measureText(ln).width);
     });
@@ -2426,7 +2433,7 @@ function renderCutoutTemplate() {
 
   useLayer('mainCopy');
   ctx.textAlign = 'left';
-  ctx.fillStyle = textHex;
+  ctx.fillStyle = mainCopyAdj.colorOverride || textHex;
   ctx.font = mainFont;
   const mainStartTy = ty;
   mainLines.forEach(ln => { ctx.fillText(ln, textLeft + mainCopyAdj.dx, ty + mainCopyAdj.dy); ty += lineH1; });
@@ -2439,7 +2446,7 @@ function renderCutoutTemplate() {
     ty += gapBetween - lineH1 + lineH2 * 0.75;
     useLayer('subCopy');
     ctx.textAlign = 'left';
-    ctx.fillStyle = textHex;
+    ctx.fillStyle = subCopyAdj.colorOverride || textHex;
     ctx.font = subFontFinal;
     ctx.globalAlpha = 0.75;
     const subStartTy = ty;
@@ -2506,7 +2513,7 @@ function renderCutoutTemplate() {
     const etSize = Math.round(18 * etAdj.scale / 100);
     ctx.font = `500 ${etSize}px ${FONT_STACK}`;
     ctx.textAlign = 'left';
-    ctx.fillStyle = textHex;
+    ctx.fillStyle = etAdj.colorOverride || textHex;
     ctx.globalAlpha = 0.8;
     const etX = textLeft + etAdj.dx;
     const etY = W - MARGIN + 4 - 26 + etAdj.dy;
@@ -2632,7 +2639,7 @@ function renderVerticalTitleTemplate() {
       const stepPx = fontSize * lineStep;
       ctx.font = `700 ${fontSize}px ${TITLE_FONT_STACK}`;
       ctx.textAlign = 'center';
-      ctx.fillStyle = white;
+      ctx.fillStyle = titleAdj.colorOverride || white;
       ctx.shadowColor = 'rgba(0,0,0,0.5)';
       ctx.shadowBlur = 16;
       const titleStartY = MARGIN + 70 + titleAdj.dy;
@@ -2669,7 +2676,7 @@ function renderVerticalTitleTemplate() {
         ctx.rotate(Math.PI / 2);
         ctx.shadowColor = 'rgba(0,0,0,0.5)';
         ctx.shadowBlur = 16;
-        const runW = drawSpacedText(ln, 0, 0, { font: `700 ${size}px ${TITLE_FONT_STACK}`, spacing: 2, color: white, align: 'left' });
+        const runW = drawSpacedText(ln, 0, 0, { font: `700 ${size}px ${TITLE_FONT_STACK}`, spacing: 2, color: titleAdj.colorOverride || white, align: 'left' });
         ctx.restore();
         maxRunW = Math.max(maxRunW, runW);
       });
@@ -2710,7 +2717,7 @@ function renderVerticalTitleTemplate() {
     ctx.save();
     ctx.translate(dOriginX, dOriginY);
     ctx.rotate(Math.PI / 2);
-    ctx.fillStyle = white;
+    ctx.fillStyle = datesAdj.colorOverride || white;
     ctx.font = `600 ${dateRunSize}px ${FONT_STACK}`;
     ctx.textAlign = 'left';
     ctx.shadowColor = 'rgba(0,0,0,0.5)';
@@ -2768,7 +2775,7 @@ function renderVerticalTitleTemplate() {
     const ctaFit = fitFontSizeTruncate(ctaText, ctaMaxW, 800, FONT_STACK, 40, 24, 0);
     const ctaSizeV2 = ctaFit.size * ctaAdjV2.scale / 100;
     ctx.font = `800 ${ctaSizeV2}px ${FONT_STACK}`;
-    ctx.fillStyle = bandTextHex;
+    ctx.fillStyle = ctaAdjV2.colorOverride || bandTextHex;
     ctx.textAlign = 'center';
     const ctaCx = (state.bannerPurpose === 'sale' && (saleTagText() || priceTagText()) ? W / 2 - 130 : W / 2) + ctaAdjV2.dx;
     const ctaCy = bandTop + bandH / 2 - 6 + ctaAdjV2.dy;
@@ -2781,7 +2788,7 @@ function renderVerticalTitleTemplate() {
     useLayer('subCopy');
     const subSizeV2 = Math.round(22 * subCopyAdj.scale / 100);
     ctx.font = `400 ${subSizeV2}px ${FONT_STACK}`;
-    ctx.fillStyle = bandTextHex;
+    ctx.fillStyle = subCopyAdj.colorOverride || bandTextHex;
     ctx.globalAlpha = 0.85;
     ctx.textAlign = 'center';
     const subCx = (state.bannerPurpose === 'sale' && (saleTagText() || priceTagText()) ? W / 2 - 130 : W / 2) + subCopyAdj.dx;
@@ -2799,7 +2806,7 @@ function renderVerticalTitleTemplate() {
   if (venueLine) {
     const venueSize = Math.round(24 * venueAdj.scale / 100);
     ctx.font = `600 ${venueSize}px ${FONT_STACK}`;
-    ctx.fillStyle = white;
+    ctx.fillStyle = venueAdj.colorOverride || white;
     ctx.textAlign = 'left';
     ctx.shadowColor = 'rgba(0,0,0,0.5)';
     ctx.shadowBlur = 8;
@@ -2844,7 +2851,7 @@ function renderVerticalTitleTemplate() {
     const etSize = Math.round(18 * etAdj.scale / 100);
     ctx.font = `500 ${etSize}px ${FONT_STACK}`;
     ctx.textAlign = 'left';
-    ctx.fillStyle = white;
+    ctx.fillStyle = etAdj.colorOverride || white;
     ctx.globalAlpha = 0.7;
     const etX = MARGIN + etAdj.dx, etY = W - 20 - 26 + etAdj.dy;
     ctx.fillText(els.extraText.value, etX, etY);
@@ -2992,7 +2999,7 @@ function renderCyberUiTemplate() {
     const titleFit = fitFontSizeWrap(titleText, titleMaxW, 700, TITLE_FONT_STACK, 58, state.titleNoWrap ? 14 : 32, 1, state.titleNoWrap ? 1 : 2, isCjkLang);
     const size = titleFit.size * titleAdj.scale / 100;
     ctx.font = `700 ${size}px ${TITLE_FONT_STACK}`;
-    ctx.fillStyle = white;
+    ctx.fillStyle = titleAdj.colorOverride || white;
     ctx.shadowColor = 'rgba(0,0,0,0.6)';
     ctx.shadowBlur = 14;
     const lineH = size * 1.1;
@@ -3015,7 +3022,7 @@ function renderCyberUiTemplate() {
   useLayer('subCopy');
   ctx.save();
   ctx.font = `700 ${ctaFontSize}px ${mono}`;
-  ctx.fillStyle = accentHex;
+  ctx.fillStyle = subCopyAdj.colorOverride || accentHex;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillText(ctaLabel, badgeX + padX, badgeY + badgeH / 2 + 1);
@@ -3043,7 +3050,7 @@ function renderCyberUiTemplate() {
     let ty = W - MARGIN - bl - 96 - (copyLines.length - 1) * lineH;
     const mainStartTy = ty;
     ctx.textAlign = 'center';
-    ctx.fillStyle = white;
+    ctx.fillStyle = mainCopyAdj.colorOverride || white;
     ctx.shadowColor = 'rgba(0,0,0,0.6)';
     ctx.shadowBlur = 18;
     copyLines.forEach(ln => { ctx.fillText(ln, W / 2 + mainCopyAdj.dx, ty + mainCopyAdj.dy); ty += lineH; });
@@ -3091,7 +3098,7 @@ function renderCyberUiTemplate() {
     const etAdj = adj('extraText');
     const etSize = Math.round(15 * etAdj.scale / 100);
     ctx.font = `400 ${etSize}px ${mono}`;
-    ctx.fillStyle = white;
+    ctx.fillStyle = etAdj.colorOverride || white;
     ctx.textAlign = 'right';
     ctx.globalAlpha = 0.55;
     const etX = W - inset - bl - 14 + etAdj.dx;
