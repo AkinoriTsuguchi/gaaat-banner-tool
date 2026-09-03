@@ -2417,7 +2417,12 @@ function renderCutoutTemplate() {
 
   const lineH1 = 46, lineH2 = 32, gapBetween = 10;
   const blockH = mainLines.length * lineH1 + (subLines.length ? gapBetween + subLines.length * lineH2 : 0);
-  let ty = W - MARGIN - 30 - blockH + lineH1 * 0.78;
+  // 72px reserved below this block for the logo/追加テキスト/コピーライト
+  // cluster, which now lives in this same left column instead of the
+  // bottom-right corner (see below) — bottomReserve keeps the two from
+  // colliding.
+  const bottomReserve = 72;
+  let ty = W - MARGIN - 30 - bottomReserve - blockH + lineH1 * 0.78;
 
   useLayer('mainCopy');
   ctx.textAlign = 'left';
@@ -2458,24 +2463,17 @@ function renderCutoutTemplate() {
     drawSaleBadges(W - MARGIN, MARGIN, 'right', accentHex, rgbToHex(pickTextColor(accent)), 20, 'top');
   }
 
-  // ---- Logo + copyright, fixed bottom-right ----
-  // This corner sits on top of the character art, so contrast against the
-  // extracted palette isn't reliable — scrim it and use fixed white instead.
+  // ---- Logo + extraText + copyright, bottom-LEFT ----
+  // Used to sit in the bottom-right corner, on top of the character art —
+  // legible only via a dedicated scrim behind it. Moved into this same left
+  // column instead (bottomReserve above makes room), so no scrim is needed:
+  // this column is always clear of the artwork, same as everything else in
+  // it (title/mainCopy/subCopy).
   useLayer('decoration');
-  if (state.artImage) {
-    ctx.save();
-    const scrim = ctx.createRadialGradient(W, W, 0, W, W, 260);
-    scrim.addColorStop(0, 'rgba(0,0,0,0.5)');
-    scrim.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = scrim;
-    ctx.fillRect(W - 300, W - 300, 300, 300);
-    ctx.restore();
-  }
-  const cornerTextColor = state.artImage ? '#ffffff' : textHex;
   const logoAdj = adj('logo');
-  const tinted = tintedLogo(logoAdj.colorOverride || cornerTextColor, 30 * logoAdj.scale / 100);
+  const tinted = tintedLogo(logoAdj.colorOverride || textHex, 30 * logoAdj.scale / 100);
   if (tinted) {
-    const lx = W - MARGIN - tinted.w + logoAdj.dx;
+    const lx = textLeft + logoAdj.dx;
     const ly = W - MARGIN - tinted.h - 22 + logoAdj.dy;
     if (!logoAdj.hidden) {
       ctx.save();
@@ -2490,15 +2488,15 @@ function renderCutoutTemplate() {
     const crAdj = adj('copyright');
     const crSize = Math.round(18 * crAdj.scale / 100);
     ctx.font = `500 ${crSize}px ${FONT_STACK}`;
-    ctx.textAlign = 'right';
-    ctx.fillStyle = crAdj.colorOverride || cornerTextColor;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = crAdj.colorOverride || textHex;
     ctx.globalAlpha = 0.8;
-    const crX = W - MARGIN + crAdj.dx;
+    const crX = textLeft + crAdj.dx;
     const crY = W - MARGIN + 4 + crAdj.dy;
     ctx.fillText(els.copyright.value, crX, crY);
     const crW = ctx.measureText(els.copyright.value).width;
     ctx.globalAlpha = 1;
-    recordBounds('copyright', crX - crW, crY - crSize * 0.8, crW, crSize);
+    recordBounds('copyright', crX, crY - crSize * 0.8, crW, crSize);
   }
 
   useLayer('extraText');
@@ -2507,15 +2505,15 @@ function renderCutoutTemplate() {
     const etAdj = adj('extraText');
     const etSize = Math.round(18 * etAdj.scale / 100);
     ctx.font = `500 ${etSize}px ${FONT_STACK}`;
-    ctx.textAlign = 'right';
-    ctx.fillStyle = cornerTextColor;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = textHex;
     ctx.globalAlpha = 0.8;
-    const etX = W - MARGIN + etAdj.dx;
+    const etX = textLeft + etAdj.dx;
     const etY = W - MARGIN + 4 - 26 + etAdj.dy;
     ctx.fillText(els.extraText.value, etX, etY);
     const etW = ctx.measureText(els.extraText.value).width;
     ctx.globalAlpha = 1;
-    recordBounds('extraText', etX - etW, etY - etSize * 0.8, etW, etSize);
+    recordBounds('extraText', etX, etY - etSize * 0.8, etW, etSize);
   }
 }
 
