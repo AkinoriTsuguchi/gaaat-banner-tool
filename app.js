@@ -780,8 +780,10 @@ function drawVenueDateLine(parts, x, y, font, color, align, separator, alpha = 1
   else if (align === 'right') cursorX = x - totalW;
   else cursorX = x;
 
+  const partAdjs = parts.map(p => adj(p.layer));
+
   parts.forEach((p, i) => {
-    const pAdj = adj(p.layer);
+    const pAdj = partAdjs[i];
     useLayer(p.layer);
     ctx.font = font;
     ctx.fillStyle = pAdj.colorOverride || color;
@@ -793,13 +795,24 @@ function drawVenueDateLine(parts, x, y, font, color, align, separator, alpha = 1
     recordBounds(p.layer, px, py - fontPx * 0.8, widths[i], fontPx);
     cursorX += widths[i];
     if (i < parts.length - 1) {
-      useLayer('decoration');
-      ctx.font = font;
-      ctx.fillStyle = color;
-      ctx.textAlign = 'left';
-      ctx.globalAlpha = alpha;
-      ctx.fillText(separator, cursorX, y);
-      ctx.globalAlpha = 1;
+      // Venue and dates can each be dragged independently (see
+      // renderXxxTemplate callers) — including down onto their own separate
+      // line. Skip the separator once that's happened (either part hidden,
+      // or the two no longer sit close enough vertically to read as one
+      // line), so it doesn't get orphaned floating in the gap where the
+      // shared line used to be — reported as a stray "/" with nothing
+      // after it once a 版元 dragged the date onto its own row.
+      const nextAdj = partAdjs[i + 1];
+      const sameLine = !pAdj.hidden && !nextAdj.hidden && Math.abs(pAdj.dy - nextAdj.dy) < fontPx * 0.6;
+      if (sameLine) {
+        useLayer('decoration');
+        ctx.font = font;
+        ctx.fillStyle = color;
+        ctx.textAlign = 'left';
+        ctx.globalAlpha = alpha;
+        ctx.fillText(separator, cursorX, y);
+        ctx.globalAlpha = 1;
+      }
       cursorX += sepW;
     }
   });
@@ -1603,26 +1616,41 @@ function roundRect(c, x, y, w, h, r) {
 // that may not match how the piece is actually exhibited or sold. Dropped
 // per user feedback ("額装を勝手につけないでほしい"): showing artwork
 // plainly can't misrepresent its real framing, for either banner purpose.
+// `outer` is the frame's DEFAULT rect (from computeFrameRect, at scale
+// 100%/no offset). scale/dx/dy here resize and reposition the frame itself
+// — not an internal crop zoom/pan — matching how every other adjustable
+// element's scale/dx/dy already works (size + position, not an internal
+// pan), so the standard corner-drag resize and on-canvas drag behave the
+// same way here as everywhere else. Grows outward from `outer`'s own
+// center, matching how computeFrameRect already centers the frame in its
+// available band. (Previously scale/dx/dy zoomed/panned the image inside a
+// FIXED-size frame — real feedback: " 決められたサイズの枠内でアップにする
+// ことはできるのですが、枠の大きさ自体を変える方法がわからず" — there was
+// no way to make the frame itself bigger.)
 function drawArtworkPlain(outer) {
   useLayer('artwork');
+  const artAdj = adj('art');
+  const w = outer.w * artAdj.scale / 100, h = outer.h * artAdj.scale / 100;
+  const cx = outer.x + outer.w / 2 + artAdj.dx, cy = outer.y + outer.h / 2 + artAdj.dy;
+  const rect = { x: cx - w / 2, y: cy - h / 2, w, h };
   if (state.artImage) {
-    const artAdj = adj('art');
-    drawCoverImage(state.artImage, outer.x, outer.y, outer.w, outer.h, artAdj.scale / 100, artAdj.dx, artAdj.dy);
-    recordBounds('art', outer.x, outer.y, outer.w, outer.h);
+    drawCoverImage(state.artImage, rect.x, rect.y, rect.w, rect.h);
+    recordBounds('art', rect.x, rect.y, rect.w, rect.h);
   } else {
     useLayer('decoration');
     ctx.save();
     ctx.strokeStyle = '#999';
     ctx.setLineDash([10, 8]);
     ctx.lineWidth = 2;
-    ctx.strokeRect(outer.x + 2, outer.y + 2, outer.w - 4, outer.h - 4);
+    ctx.strokeRect(rect.x + 2, rect.y + 2, rect.w - 4, rect.h - 4);
     ctx.fillStyle = '#999';
     ctx.font = `400 18px ${FONT_STACK}`;
     ctx.textAlign = 'center';
-    ctx.fillText('素材をアップロード', outer.x + outer.w / 2, outer.y + outer.h / 2);
+    ctx.fillText('素材をアップロード', rect.x + rect.w / 2, rect.y + rect.h / 2);
     ctx.restore();
+    recordBounds('art', rect.x, rect.y, rect.w, rect.h);
   }
-  return outer;
+  return rect;
 }
 
 const LINEUP_MAX_IMAGES = 6;
