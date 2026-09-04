@@ -1118,8 +1118,41 @@
         <input type="number" id="adjSaleTagDx" value="0" step="1">
         <input type="number" id="adjSaleTagDy" value="0" step="1">
         <input type="checkbox" id="adjSaleTagHidden">
+
+        <label for="adjSeparatorScale">会場・会期の区切り記号
+          <span class="adjust-color-override">
+            <input type="color" id="adjSeparatorColor" value="#ffffff" title="色を指定（自動配色を上書き）">
+            <button type="button" id="adjSeparatorColorReset" title="自動配色に戻す">↺</button>
+          </span>
+        </label>
+        <input type="number" id="adjSeparatorScale" value="100" step="5" disabled title="区切り記号1文字のみのため、サイズ変更は非対応です">
+        <input type="number" id="adjSeparatorDx" value="0" step="1">
+        <input type="number" id="adjSeparatorDy" value="0" step="1">
+        <input type="checkbox" id="adjSeparatorHidden">
+
+        <label for="adjHudTextScale">背景の装飾テキスト（HUD風）
+          <span class="adjust-color-override">
+            <input type="color" id="adjHudTextColor" value="#ffffff" title="色を指定（自動配色を上書き）">
+            <button type="button" id="adjHudTextColorReset" title="自動配色に戻す">↺</button>
+          </span>
+        </label>
+        <input type="number" id="adjHudTextScale" value="100" step="5">
+        <input type="number" id="adjHudTextDx" value="0" step="1">
+        <input type="number" id="adjHudTextDy" value="0" step="1">
+        <input type="checkbox" id="adjHudTextHidden">
+
+        <label for="adjHudBracketsScale">四隅のブラケット装飾
+          <span class="adjust-color-override">
+            <input type="color" id="adjHudBracketsColor" value="#ffffff" title="色を指定（自動配色を上書き）">
+            <button type="button" id="adjHudBracketsColorReset" title="自動配色に戻す">↺</button>
+          </span>
+        </label>
+        <input type="number" id="adjHudBracketsScale" value="100" step="5">
+        <input type="number" id="adjHudBracketsDx" value="0" step="1">
+        <input type="number" id="adjHudBracketsDy" value="0" step="1">
+        <input type="checkbox" id="adjHudBracketsHidden">
       </div>
-      <p class="hint">「開催会場名／価格バッジ」欄は、来場促進（集客用）では会場名テキストの位置調整に、オンライン販売用では価格バッジの位置調整に使います（用途に応じて自動で役割が切り替わります）。オンライン販売用のバッジについて: 「セールタグバッジ」欄はアート作品 オンライン販売中などのバッジ、「会期情報」欄は販売終了日の表示があれば、そちらの位置調整に使います（いずれもバナー用途を「オンライン販売用」にした時だけ表示されます）。全テンプレートで、会場名と会期情報（・コピーライトなどの他のテキスト）はそれぞれ独立してドラッグ・サイズ変更・非表示にできます（同じ行に並んで表示される場合でも、動かすと片方だけ移動します）。</p>
+      <p class="hint">「開催会場名／価格バッジ」欄は、来場促進(集客用)では会場名テキストの位置調整に、オンライン販売用では価格バッジの位置調整に使います(用途に応じて自動で役割が切り替わります)。オンライン販売用のバッジについて: 「セールタグバッジ」欄はアート作品 オンライン販売中などのバッジ、「会期情報」欄は販売終了日の表示があれば、そちらの位置調整に使います(いずれもバナー用途を「オンライン販売用」にした時だけ表示されます)。全テンプレートで、会場名と会期情報(・コピーライトなどの他のテキスト)はそれぞれ独立してドラッグ・サイズ変更・非表示にできます(同じ行に並んで表示される場合でも、動かすと片方だけ移動します)。「会場・会期の区切り記号」欄は、会場名と会期情報を同じ行に並べて表示するテンプレート(③ギャラリー型、④スポットライト額装型、①キャラクター切り抜き型、⑤サイバーUI型、⑥キャラクターラインナップ型)の区切り記号(／や//など)の位置調整・非表示に使います。「背景の装飾テキスト」「四隅のブラケット装飾」の2欄は⑤サイバーUI型専用で、背景にうっすら表示されるダミーテキストと四隅の「」型の飾り線をそれぞれ非表示・移動・色変更できます。</p>
       <div style="display:flex; gap:8px; margin-top:8px;">
         <button type="button" id="undoAdjustmentsBtn" title="元に戻す（Ctrl+Z）">↶ 元に戻す</button>
         <button type="button" id="redoAdjustmentsBtn" title="やり直す（Ctrl+Shift+Z）">↷ やり直す</button>
@@ -1202,6 +1235,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=90"></script>
+<script src="app.js?v=92"></script>
 </body>
 </html>

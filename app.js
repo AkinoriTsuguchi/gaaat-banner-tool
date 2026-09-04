@@ -376,9 +376,8 @@ const state = {
   // persisted across a page reload, same as every other field here.
   adjustments: {
     // colorOverride is null (= use the template's auto-derived color) on
-    // every category for a uniform shape, but is only ever read for 'logo'
-    // and 'copyright' — the two elements a 版元 might drag onto a part of
-    // the banner where the automatic text color no longer has enough
+    // every category — lets a 版元 recolor any text/pill they drag onto a
+    // part of the banner where the automatic color no longer has enough
     // contrast (e.g. onto a locally light area of otherwise-dark artwork).
     logo: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
     copyright: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
@@ -397,7 +396,20 @@ const state = {
     // once end dates became optional-but-showable again in sale mode, the
     // venue/date info line and the sale-tag pill can appear at the same
     // time, so they need independent drag boxes and hide toggles.
-    saleTag: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null }
+    saleTag: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    // The venue/date separator glyph drawn by drawVenueDateLine (shared by
+    // frame3/frame4/cutout1/cyberui5/lineup). Previously fixed in position
+    // and color with no hide option — dx/dy nudge it off the shared
+    // baseline, scale isn't used (it's a single glyph, not worth a second
+    // font-size knob), colorOverride/hidden work as usual.
+    separator: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    // cyberui5's 3 faint decorative HUD strings (ERROR CODE / SYSTEM-TT /
+    // SCANNING...), moved/resized/recolored/hidden as one group since they
+    // have no independent meaning from each other.
+    hudText: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    // cyberui5's 4 corner brackets, moved/resized/recolored/hidden as one
+    // group (dx/dy shift all 4 corners together, scale adjusts leg length).
+    hudBrackets: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null }
   }
 };
 
@@ -419,7 +431,9 @@ const ADJUSTMENT_LABELS = {
   logo: 'ロゴ', copyright: 'コピーライト', title: 'タイトル',
   mainCopy: 'メインコピー', subCopy: 'サブコピー', art: '素材', dates: '会期情報',
   extraText: '追加テキスト', venue: '開催会場名／価格バッジ',
-  saleTag: 'セールタグバッジ（オンライン販売用）'
+  saleTag: 'セールタグバッジ（オンライン販売用）',
+  separator: '会場・会期の区切り記号', hudText: '背景の装飾テキスト（HUD風）',
+  hudBrackets: '四隅のブラケット装飾'
 };
 function recordBounds(key, x, y, w, h) {
   state.elementBounds[key] = { x, y, w, h };
@@ -804,13 +818,14 @@ function drawVenueDateLine(parts, x, y, font, color, align, separator, alpha = 1
       // after it once a 版元 dragged the date onto its own row.
       const nextAdj = partAdjs[i + 1];
       const sameLine = !pAdj.hidden && !nextAdj.hidden && Math.abs(pAdj.dy - nextAdj.dy) < fontPx * 0.6;
-      if (sameLine) {
+      const sepAdj = adj('separator');
+      if (sameLine && !sepAdj.hidden) {
         useLayer('decoration');
         ctx.font = font;
-        ctx.fillStyle = color;
+        ctx.fillStyle = sepAdj.colorOverride || color;
         ctx.textAlign = 'left';
         ctx.globalAlpha = alpha;
-        ctx.fillText(separator, cursorX, y);
+        ctx.fillText(separator, cursorX + sepAdj.dx, y + sepAdj.dy);
         ctx.globalAlpha = 1;
       }
       cursorX += sepW;
@@ -2940,46 +2955,58 @@ function renderCyberUiTemplate() {
   ctx.fillRect(0, W * 0.42, W, W * 0.58);
 
   // ---- HUD corner brackets ----
-  const bl = 34; // bracket leg length
+  // bl/inset stay defined regardless of hidden — the rest of this function
+  // (badge/title/copyright/extraText positions below) uses them as layout
+  // anchors even when the brackets themselves aren't drawn.
+  const hudBracketsAdj = adj('hudBrackets');
+  const bl = 34 * hudBracketsAdj.scale / 100; // bracket leg length
   const inset = MARGIN - 18;
-  ctx.save();
-  ctx.strokeStyle = accentHex;
-  ctx.lineWidth = 2;
-  ctx.globalAlpha = 0.85;
-  const corners = [
-    [[inset, inset + bl], [inset, inset], [inset + bl, inset]],
-    [[W - inset - bl, inset], [W - inset, inset], [W - inset, inset + bl]],
-    [[inset, W - inset - bl], [inset, W - inset], [inset + bl, W - inset]],
-    [[W - inset - bl, W - inset], [W - inset, W - inset], [W - inset, W - inset - bl]]
-  ];
-  corners.forEach(pts => {
-    ctx.beginPath();
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    ctx.lineTo(pts[1][0], pts[1][1]);
-    ctx.lineTo(pts[2][0], pts[2][1]);
-    ctx.stroke();
-  });
-  ctx.restore();
+  if (!hudBracketsAdj.hidden) {
+    ctx.save();
+    ctx.strokeStyle = hudBracketsAdj.colorOverride || accentHex;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.85;
+    const bdx = hudBracketsAdj.dx, bdy = hudBracketsAdj.dy;
+    const corners = [
+      [[inset, inset + bl], [inset, inset], [inset + bl, inset]],
+      [[W - inset - bl, inset], [W - inset, inset], [W - inset, inset + bl]],
+      [[inset, W - inset - bl], [inset, W - inset], [inset + bl, W - inset]],
+      [[W - inset - bl, W - inset], [W - inset, W - inset], [W - inset, W - inset - bl]]
+    ];
+    corners.forEach(pts => {
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0] + bdx, pts[0][1] + bdy);
+      ctx.lineTo(pts[1][0] + bdx, pts[1][1] + bdy);
+      ctx.lineTo(pts[2][0] + bdx, pts[2][1] + bdy);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+  recordBounds('hudBrackets', inset + hudBracketsAdj.dx, inset + hudBracketsAdj.dy, W - 2 * inset, W - 2 * inset);
 
   useLayer('decoration');
   // ---- Scattered pseudo system-UI labels ----
   // Template flavor text, not tied to any one input field — stays with
   // the other decorative HUD elements rather than a per-field text layer.
-  const now = new Date();
-  const stamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-  const snippets = [
-    { text: 'ERROR CODE 000.', x: W - MARGIN - 4, y: MARGIN + 66, align: 'right' },
-    { text: `SYSTEM-TT / ${stamp}`, x: MARGIN + 4, y: W * 0.48, align: 'left' },
-    { text: 'SCANNING...', x: W - MARGIN - 4, y: W * 0.55, align: 'right' }
-  ];
-  ctx.font = `400 15px ${mono}`;
-  ctx.globalAlpha = 0.62;
-  snippets.forEach(s => {
-    ctx.fillStyle = accentHex;
-    ctx.textAlign = s.align;
-    ctx.fillText(s.text, s.x, s.y);
-  });
-  ctx.globalAlpha = 1;
+  const hudTextAdj = adj('hudText');
+  if (!hudTextAdj.hidden) {
+    const now = new Date();
+    const stamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    const snippets = [
+      { text: 'ERROR CODE 000.', x: W - MARGIN - 4, y: MARGIN + 66, align: 'right' },
+      { text: `SYSTEM-TT / ${stamp}`, x: MARGIN + 4, y: W * 0.48, align: 'left' },
+      { text: 'SCANNING...', x: W - MARGIN - 4, y: W * 0.55, align: 'right' }
+    ];
+    ctx.font = `400 ${Math.round(15 * hudTextAdj.scale / 100)}px ${mono}`;
+    ctx.globalAlpha = 0.62;
+    snippets.forEach(s => {
+      ctx.fillStyle = hudTextAdj.colorOverride || accentHex;
+      ctx.textAlign = s.align;
+      ctx.fillText(s.text, s.x + hudTextAdj.dx, s.y + hudTextAdj.dy);
+    });
+    ctx.globalAlpha = 1;
+  }
+  recordBounds('hudText', MARGIN + 4 + hudTextAdj.dx, MARGIN + 40 + hudTextAdj.dy, W - 2 * MARGIN - 8, W * 0.15);
 
   // CTA badge dimensions are computed first (though drawn after the title,
   // see below) purely so the title's headline knows where the badge's left
@@ -3292,7 +3319,7 @@ els.textPicker.addEventListener('input', () => { state.textOverride = hexToRgb(e
 // Field ids follow adj{Category}{Scale|Dx|Dy|Hidden}, matching
 // state.adjustments' keys 1:1, so this can bind all rows generically instead
 // of one hand-written listener set per category.
-const ADJUSTMENT_CATEGORIES = ['logo', 'copyright', 'title', 'mainCopy', 'subCopy', 'dates', 'extraText', 'art', 'venue', 'saleTag'];
+const ADJUSTMENT_CATEGORIES = ['logo', 'copyright', 'title', 'mainCopy', 'subCopy', 'dates', 'extraText', 'art', 'venue', 'saleTag', 'separator', 'hudText', 'hudBrackets'];
 
 // Pushes state.adjustments[cat] into its <input>s — used after any
 // non-typing change (canvas drag, wheel-resize, reset) so the panel never
@@ -3449,10 +3476,9 @@ ADJUSTMENT_CATEGORIES.forEach(cat => {
       render();
     });
   }
-  // Only 'logo' and 'copyright' actually have these two elements in the
-  // HTML (see the adjust-grid markup) — every other category's lookup here
-  // is just a harmless null, same pattern as the other optional elements
-  // above.
+  // 'art' is the one category with no color-override markup (the uploaded
+  // artwork itself must never be recolored) — its lookup here is just a
+  // harmless null, same pattern as the other optional elements above.
   const colorEl = document.getElementById(idBase + 'Color');
   if (colorEl) {
     colorEl.addEventListener('input', () => {
