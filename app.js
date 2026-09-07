@@ -328,6 +328,13 @@ const state = {
   // {image: HTMLImageElement, name}. Capped at LINEUP_MAX_IMAGES.
   lineupImages: [],
   logoImage: null,
+  // Optional LP key-visual screenshot, uploaded purely as an alternate
+  // palette source (see extractPalette) — never drawn into the banner
+  // itself. useKvPalette toggles whether the extracted bg/accent/text
+  // colors come from this image (true) or from artImage as usual (false);
+  // auto-set true on upload, auto-set false when the image is removed.
+  kvImage: null,
+  useKvPalette: false,
   colors: {
     bg: { r: 245, g: 243, b: 238 },
     accent: { r: 226, g: 87, b: 76 },
@@ -524,6 +531,11 @@ const els = {
   lineupUploadWrap: document.getElementById('lineupUploadWrap'),
   lineupFile: document.getElementById('lineupFile'),
   lineupThumbGrid: document.getElementById('lineupThumbGrid'),
+  kvFile: document.getElementById('kvFile'),
+  kvPreviewRow: document.getElementById('kvPreviewRow'),
+  kvPreviewImg: document.getElementById('kvPreviewImg'),
+  removeKvBtn: document.getElementById('removeKvBtn'),
+  useKvPaletteToggle: document.getElementById('useKvPaletteToggle'),
   bgPicker: document.getElementById('bgColorPicker'),
   accentPicker: document.getElementById('accentColorPicker'),
   textPicker: document.getElementById('textColorPicker'),
@@ -3189,6 +3201,24 @@ function hasArtworkForExport() {
   return state.template === 'lineup' ? state.lineupImages.length > 0 : !!state.artImage;
 }
 
+// Single source of truth for "what image should the auto-palette come
+// from" — the uploaded LP KV screenshot when useKvPalette is on (and one's
+// actually been uploaded), otherwise the artwork as always. Called after
+// every artwork/KV upload and from the "素材から再抽出" reset button, so
+// switching the KV checkbox on/off, uploading new artwork, or uploading a
+// new KV all funnel through the same extraction + auto-template logic.
+function refreshPaletteFromSource() {
+  const source = (state.useKvPalette && state.kvImage) ? state.kvImage : state.artImage;
+  if (!source) return;
+  const palette = extractPalette(source);
+  state.colors.bg = palette.bg;
+  state.colors.accent = palette.accent;
+  state.colors.accentRaw = palette.accentRaw;
+  state.textOverride = null;
+  syncColorPickers();
+  maybeAutoSelectTemplate();
+}
+
 els.artFile.addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
@@ -3197,18 +3227,49 @@ els.artFile.addEventListener('change', e => {
     const img = new Image();
     img.onload = () => {
       state.artImage = img;
-      const palette = extractPalette(img);
-      state.colors.bg = palette.bg;
-      state.colors.accent = palette.accent;
-      state.colors.accentRaw = palette.accentRaw;
-      state.textOverride = null;
-      syncColorPickers();
-      maybeAutoSelectTemplate();
+      refreshPaletteFromSource();
       render();
     };
     img.src = ev.target.result;
   };
   reader.readAsDataURL(file);
+});
+
+// KV screenshot is palette-only — never composited into the banner, so it
+// gets its own upload input separate from artFile/lineupFile.
+els.kvFile.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      state.kvImage = img;
+      state.useKvPalette = true;
+      els.kvPreviewImg.src = img.src;
+      els.kvPreviewRow.style.display = 'flex';
+      els.useKvPaletteToggle.checked = true;
+      refreshPaletteFromSource();
+      render();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+els.useKvPaletteToggle.addEventListener('change', () => {
+  state.useKvPalette = els.useKvPaletteToggle.checked;
+  refreshPaletteFromSource();
+  render();
+});
+
+els.removeKvBtn.addEventListener('click', () => {
+  state.kvImage = null;
+  state.useKvPalette = false;
+  els.kvFile.value = '';
+  els.kvPreviewRow.style.display = 'none';
+  refreshPaletteFromSource();
+  render();
 });
 
 // Rebuilds the ⑥キャラクターラインナップ型 thumbnail strip from
@@ -5404,13 +5465,7 @@ async function selectDriveFile(file) {
       img.src = dataUrl;
     });
     state.artImage = img;
-    const palette = extractPalette(img);
-    state.colors.bg = palette.bg;
-    state.colors.accent = palette.accent;
-    state.colors.accentRaw = palette.accentRaw;
-    state.textOverride = null;
-    syncColorPickers();
-    maybeAutoSelectTemplate();
+    refreshPaletteFromSource();
     render();
     els.driveStatus.textContent = `${file.name} を読み込みました。`;
   } catch (err) {
