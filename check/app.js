@@ -24,6 +24,7 @@
     priceSet: null,      // Set<number>
     priceSource: '',
     projects: [],
+    folderId: null,
     signedIn: false
   };
 
@@ -198,6 +199,21 @@
     } catch (e) { /* 取れなくてもDrive上の経路は出す */ }
     if (!email) return null;
     return '~/Library/CloudStorage/GoogleDrive-' + email + '/マイドライブ/' + pathNames.join('/');
+  }
+
+  // Illustrator が書き出した結果はドライブ上のフォルダに入る。同期されていれば
+  // API で直接読めるので、ファイルを人が探してドラッグする必要はない。
+  async function fetchResultJson(folderId) {
+    const q = encodeURIComponent(
+      `'${folderId}' in parents and name = '_入稿チェック結果.json' and trashed = false`);
+    const res = await GAAAT.google.apiFetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)` +
+      '&supportsAllDrives=true&includeItemsFromAllDrives=true');
+    const files = (await res.json()).files || [];
+    if (!files.length) return null;
+    const dl = await GAAAT.google.apiFetch(
+      `https://www.googleapis.com/drive/v3/files/${files[0].id}?alt=media&supportsAllDrives=true`);
+    return { text: await dl.text(), modifiedTime: files[0].modifiedTime };
   }
 
   function pickLatestByModified(files) {
@@ -714,6 +730,7 @@
         const path = await drivePath(id);
         report.folderName = path[path.length - 1] || '';
         state.report = report;
+        state.folderId = id;
         renderFolderInfo(path, files, ai, await localPathFor(path));
         els.googleStatus.textContent = 'フォルダを読みました。';
         render();
@@ -877,13 +894,11 @@
 
     const ol = document.createElement('ol');
     [
-      localPath ? '上の「このパスをコピー」を押す' : 'このフォルダの場所を控える',
-      'Illustrator で ファイル → スクリプト → その他のスクリプト... → preflight.jsx を選ぶ',
-      localPath
-        ? 'フォルダ選択が出たら Cmd + Shift + G → パスを貼って Enter → 「開く」'
-        : 'フォルダ選択で、上の経路をたどって選ぶ',
-      '数分待つ（1本400MB以上あります）。「環境にないフォント」が出たら「閉じる」',
-      'できた _入稿チェック結果.json を、下の手順2にドラッグ&ドロップ'
+      '下の「① Illustratorに渡す」を押す（指示ファイルが1つ落ちてきます）',
+      'Illustrator で ファイル → スクリプト → その他のスクリプト... → preflight.jsx',
+      'このフォルダでいいか聞かれるので「はい」。あとは数分待つだけ' +
+        '（.ai は自分で開かなくていい。スクリプトが開いて閉じます）',
+      'このページに戻って「② 結果を取り込む」を押す'
     ].forEach(t => {
       const li = document.createElement('li');
       li.textContent = t;
@@ -891,18 +906,68 @@
     });
     next.appendChild(ol);
 
+    const row = document.createElement('div');
+    row.className = 'nextbtns';
+
+    // ① 対象フォルダをファイルに書き出す。JSXがダウンロードフォルダから拾うので、
+    //    Illustrator 側でフォルダを選ぶ操作が丸ごと消える。
+    const jobBtn = document.createElement('button');
+    jobBtn.className = 'copy primary';
+    jobBtn.textContent = '① Illustratorに渡す';
+    jobBtn.disabled = !localPath;
+    jobBtn.addEventListener('click', () => {
+      const job = { folderPath: localPath, folderName: path[path.length - 1] || '',
+                    createdAt: new Date().toISOString() };
+      const blob = new Blob([JSON.stringify(job, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'gaaat-check-job.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      jobBtn.textContent = '① 渡しました';
+      setTimeout(() => { jobBtn.textContent = '① Illustratorに渡す'; }, 2500);
+    });
+    row.appendChild(jobBtn);
+
+    // ② 結果はドライブ側に書かれるので、そのまま読む。人がファイルを探さなくていい。
+    const pullBtn = document.createElement('button');
+    pullBtn.className = 'copy';
+    pullBtn.textContent = '② 結果を取り込む';
+    pullBtn.addEventListener('click', async () => {
+      pullBtn.disabled = true;
+      pullBtn.textContent = '探しています…';
+      try {
+        const found = await fetchResultJson(state.folderId);
+        if (!found) {
+          pullBtn.textContent = 'まだ結果がありません';
+          setTimeout(() => { pullBtn.textContent = '② 結果を取り込む'; }, 2500);
+          return;
+        }
+        loadReport(found.text, '_入稿チェック結果.json');
+        pullBtn.textContent = '取り込みました';
+        els.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e) {
+        pullBtn.textContent = String(e.message || e).slice(0, 40);
+      } finally {
+        pullBtn.disabled = false;
+      }
+    });
+    row.appendChild(pullBtn);
+
     const jump = document.createElement('button');
     jump.className = 'copy';
     jump.textContent = 'いまの判定結果を見る';
     jump.addEventListener('click', () => {
       els.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
-    next.appendChild(jump);
+    row.appendChild(jump);
+    next.appendChild(row);
 
     const note = document.createElement('p');
     note.className = 'note';
     note.textContent = 'ペアの有無と新しさは、この時点でもう判定できています（ページ下部）。' +
-      '残りの4項目は .ai の中身が要るので、上の手順で Illustrator を1回走らせてください。';
+      '残りの4項目は .ai の中身が要るので、Illustrator を1回だけ走らせてください。' +
+      '結果がまだ出ないときは、ドライブの同期待ちです。少し置いてもう一度押してください。';
     next.appendChild(note);
     box.appendChild(next);
   }

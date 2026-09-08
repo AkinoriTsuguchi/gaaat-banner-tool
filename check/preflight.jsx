@@ -42,6 +42,11 @@
   // 上の階層から全部舐めると240フォルダで2分たっても案件に届かなかった。
   // 深いところから探すのはブラウザ側（Drive APIの全文検索）の仕事にしてある。
   var SEARCH = { maxDepth: 2, maxFolders: 60, maxResults: 20, budgetMs: 20000 };
+  // チェック用ページが書き出す「指示ファイル」。ダウンロードフォルダに落ちてくるので、
+  // ここから対象フォルダを受け取れば、フォルダ選択のダイアログ自体が要らなくなる。
+  // 同名ファイルがあるとブラウザは「(1)」を付けるので、前方一致で拾って最新を使う。
+  var JOB_FILE_RE = /^gaaat-check-job.*\.json$/i;
+  var JOB_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
   function ptToMm(pt) { return pt * PT_TO_MM; }
   function round2(n) { return Math.round(n * 100) / 100; }
@@ -124,6 +129,57 @@
       if (files[i].modified.getTime() > best.modified.getTime()) best = files[i];
     }
     return best;
+  }
+
+  /* ---------- チェック用ページからの指示を読む ---------- */
+
+  function readJob() {
+    var dl = new Folder('~/Downloads');
+    if (!dl.exists) return null;
+    var cands;
+    try {
+      cands = dl.getFiles(function (f) {
+        return (f instanceof File) && JOB_FILE_RE.test(decodeName(f));
+      });
+    } catch (e) { return null; }
+    if (!cands || !cands.length) return null;
+
+    var newest = cands[0];
+    for (var i = 1; i < cands.length; i++) {
+      if (cands[i].modified.getTime() > newest.modified.getTime()) newest = cands[i];
+    }
+    if ((new Date()).getTime() - newest.modified.getTime() > JOB_MAX_AGE_MS) return null;
+
+    newest.encoding = 'UTF-8';
+    if (!newest.open('r')) return null;
+    var text = newest.read();
+    newest.close();
+
+    var job;
+    // 自分のブラウザが書き出したファイルなので eval で読む（ExtendScript に JSON は無い）。
+    try { job = eval('(' + text + ')'); } catch (e2) { return null; }
+    if (!job || !job.folderPath) return null;
+
+    var folder = resolveFolder(job.folderPath);
+    if (!folder) return null;
+    return { folder: folder, name: job.folderName || decodeName(folder), path: job.folderPath };
+  }
+
+  // パスは日本語と @ を含み、先頭が ~ の場合もある。ExtendScript の Folder は
+  // URIとして解釈するので、素のまま／URIエンコード済み／ホーム展開済みの順に試す。
+  function resolveFolder(raw) {
+    var home = Folder.myDocuments.parent.fsName;
+    var expanded = raw.charAt(0) === '~' ? home + raw.substring(1) : raw;
+    var tries = [raw, expanded];
+    try { tries.push(encodeURI(expanded)); } catch (e) {}
+    try { tries.push(decodeURI(expanded)); } catch (e2) {}
+    for (var i = 0; i < tries.length; i++) {
+      try {
+        var f = new Folder(tries[i]);
+        if (f.exists) return f;
+      } catch (e3) {}
+    }
+    return null;
   }
 
   /* ---------- 選ばれたフォルダの下から入稿データを探す ----------
@@ -395,7 +451,21 @@
   /* ---------- 本体 ---------- */
 
   function run() {
-    var folder = Folder.selectDialog('入稿フォルダを選んでください（[ol前]/[ol後] の .ai が入っているフォルダ）');
+    var folder = null;
+
+    // ページから指示が来ていれば、フォルダを選ぶ操作そのものを省く。
+    var job = readJob();
+    if (job) {
+      if (confirm('チェック用ページから指示が届いています。\n\n' +
+                  '案件: ' + job.name + '\n\n' +
+                  'このフォルダをチェックしますか？\n' +
+                  '（「いいえ」を選ぶと、自分でフォルダを選べます）')) {
+        folder = job.folder;
+      }
+    }
+    if (!folder) {
+      folder = Folder.selectDialog('入稿フォルダを選んでください（[ol前]/[ol後] の .ai が入っているフォルダ）');
+    }
     if (!folder) return;
 
     var found = collectAiFiles(folder);
@@ -542,8 +612,9 @@
     summary.push('書き出し先:');
     summary.push(decodeURI(out.fsName));
     summary.push('');
-    summary.push('このJSONを check/ のページにドラッグ&ドロップすると、');
+    summary.push('チェック用ページに戻って「Illustratorの結果を取り込む」を押すと、');
     summary.push('サイズと金額をシートと突き合わせた合否が出ます。');
+    summary.push('（ドライブの同期が終わるまで少しかかることがあります）');
     if (result.warnings.length) {
       summary.push('');
       summary.push('■ 注意');
