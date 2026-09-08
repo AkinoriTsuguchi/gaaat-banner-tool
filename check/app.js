@@ -867,12 +867,44 @@
       box.appendChild(copy);
     }
 
+    // 選んだあと何をすればいいのかが分からない、という声があったので、
+    // 次の操作をここに置く。結果はページ下部に出るため気づかれにくい。
+    const next = document.createElement('div');
+    next.className = 'nextsteps';
+    const nh = document.createElement('h4');
+    nh.textContent = '次にやること';
+    next.appendChild(nh);
+
+    const ol = document.createElement('ol');
+    [
+      localPath ? '上の「このパスをコピー」を押す' : 'このフォルダの場所を控える',
+      'Illustrator で ファイル → スクリプト → その他のスクリプト... → preflight.jsx を選ぶ',
+      localPath
+        ? 'フォルダ選択が出たら Cmd + Shift + G → パスを貼って Enter → 「開く」'
+        : 'フォルダ選択で、上の経路をたどって選ぶ',
+      '数分待つ（1本400MB以上あります）。「環境にないフォント」が出たら「閉じる」',
+      'できた _入稿チェック結果.json を、下の手順2にドラッグ&ドロップ'
+    ].forEach(t => {
+      const li = document.createElement('li');
+      li.textContent = t;
+      ol.appendChild(li);
+    });
+    next.appendChild(ol);
+
+    const jump = document.createElement('button');
+    jump.className = 'copy';
+    jump.textContent = 'いまの判定結果を見る';
+    jump.addEventListener('click', () => {
+      els.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    next.appendChild(jump);
+
     const note = document.createElement('p');
     note.className = 'note';
-    note.textContent = localPath
-      ? 'Illustrator のフォルダ選択で Cmd + Shift + G を押し、このパスを貼って Enter を押すと一気に飛べます。'
-      : 'このフォルダの中の ' + files.length + ' 件のうち、直下の .ai だけを見ています。';
-    box.appendChild(note);
+    note.textContent = 'ペアの有無と新しさは、この時点でもう判定できています（ページ下部）。' +
+      '残りの4項目は .ai の中身が要るので、上の手順で Illustrator を1回走らせてください。';
+    next.appendChild(note);
+    box.appendChild(next);
   }
 
   document.addEventListener('DOMContentLoaded', boot);
