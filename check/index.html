@@ -89,6 +89,27 @@
   #loaded{font-size:12px;margin-top:12px;color:var(--muted);}
   #loaded b{color:var(--text);}
 
+  .howto{margin-top:14px;border-top:1px solid var(--border);padding-top:12px;}
+  .howto summary{
+    font-size:12px;color:var(--muted);cursor:pointer;
+    list-style:none;display:flex;align-items:center;gap:6px;
+  }
+  .howto summary::-webkit-details-marker{display:none;}
+  .howto summary::before{content:'▸';color:var(--accent);font-size:11px;}
+  .howto[open] summary::before{content:'▾';}
+  .howto summary:hover{color:var(--text);}
+  .howto ol{margin:12px 0 0;padding-left:20px;font-size:12.5px;color:var(--muted);line-height:1.9;}
+  .howto ol li{margin:5px 0;}
+  .howto ol b{color:var(--text);}
+  .howto code{background:var(--panel-bg2);padding:1px 5px;border-radius:4px;color:var(--text);font-size:11.5px;}
+  .howto .hint{margin:12px 0 0;}
+  .howto .dl{
+    display:inline-block;margin-top:14px;padding:9px 16px;
+    background:var(--accent);color:#fff;border-radius:6px;
+    font-size:12.5px;font-weight:600;text-decoration:none;
+  }
+  .howto .dl:hover{background:#ef6357;}
+
   .verdict{
     border-radius:10px;
     padding:18px 20px;
@@ -145,8 +166,8 @@
 
   <h1>GAAAT 入稿チェック</h1>
   <p class="sub">
-    Illustrator で <code>check/preflight.jsx</code> を実行して出てきた
-    <code>_入稿チェック結果.json</code> を読み込むと、サイズと金額をシートと突き合わせて合否を出します。
+    Illustrator で <code>preflight.jsx</code> を実行して出てきた <code>_入稿チェック結果.json</code> を読み込むと、
+    サイズと金額をシートと突き合わせて合否を出します。作り方は手順1の中に書いてあります。
   </p>
 
   <fieldset>
@@ -157,6 +178,23 @@
     </div>
     <input type="file" id="filePicker" accept=".json,application/json" hidden>
     <div id="loaded"></div>
+
+    <details class="howto">
+      <summary>JSONの作り方（Illustratorで1回実行するだけ）</summary>
+      <ol>
+        <li>下のボタンで <code>preflight.jsx</code> を保存する（保存先はどこでもOK）</li>
+        <li><b>Illustrator を起動する</b>（ファイルは開かなくてよい）</li>
+        <li><b>ファイル → スクリプト → その他のスクリプト...</b> で、保存した <code>preflight.jsx</code> を選ぶ</li>
+        <li>フォルダを選ぶ画面が出るので、<b>入稿フォルダ</b>（<code>[ol前]</code>／<code>[ol後]</code> の .ai が入っているフォルダ）を選ぶ</li>
+        <li>進捗バーが出る。入稿データは1本400MB以上あるので<b>数分かかる</b>。終わるまで待つ</li>
+        <li>同じフォルダに <code>_入稿チェック結果.json</code> ができるので、それを上の枠にドラッグ&amp;ドロップ</li>
+      </ol>
+      <p class="hint">
+        Googleドライブの入稿フォルダをFinderから開けるようにする手順は、別紙の準備ガイドを参照してください。
+        スクリプトはファイルを保存せずに閉じるので、入稿データが書き換わることはありません。
+      </p>
+      <a class="dl" href="preflight.jsx" download>preflight.jsx を保存</a>
+    </details>
   </fieldset>
 
   <fieldset>
@@ -243,6 +281,6 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="../shared/google.js?v=6"></script>
 <script src="../shared/master-sheet.js?v=6"></script>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
