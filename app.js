@@ -3357,23 +3357,33 @@ els.lineupFile.addEventListener('change', e => {
 });
 
 // Lets a copied image (e.g. a screenshot still on the clipboard) be pasted
-// directly into an upload zone instead of always requiring a saved file —
-// zoneEl just needs to be a container the user can click/tab into (made
-// focusable here); onFiles receives every image Blob found in the pasted
-// clipboard data (in practice almost always exactly one). The 'paste' event
-// only fires on the currently focused element, so clicking anywhere in the
-// zone (not necessarily the file input itself) before Ctrl/Cmd+V is what
-// makes this unambiguous when 3 separate zones exist on the same page.
+// directly into an upload zone instead of always requiring a saved file.
+// A 'paste' event only dispatches on an actual "editing host" (a text
+// input/textarea/contenteditable) — a plain focusable <div> like our zones
+// is not one, so the browser routes the event to `document` instead and it
+// never reaches a listener on the div itself. So this listens once on
+// `document` and, at paste time, checks document.activeElement against
+// every registered zone (covers the zone div itself and any focusable
+// descendant inside it — the file input, a checkbox, the remove button —
+// so clicking anywhere sensible in a zone before Ctrl/Cmd+V works). If the
+// focus isn't inside any registered zone (e.g. the user is typing in a text
+// field elsewhere), this does nothing and the browser's normal paste
+// proceeds untouched.
+const pasteZones = [];
 function enablePasteUpload(zoneEl, onFiles) {
-  zoneEl.addEventListener('paste', e => {
-    const items = e.clipboardData && e.clipboardData.items;
-    if (!items) return;
-    const files = [...items].filter(it => it.type.startsWith('image/')).map(it => it.getAsFile()).filter(Boolean);
-    if (!files.length) return;
-    e.preventDefault();
-    onFiles(files);
-  });
+  pasteZones.push({ zoneEl, onFiles });
 }
+document.addEventListener('paste', e => {
+  const active = document.activeElement;
+  const zone = pasteZones.find(z => active && z.zoneEl.contains(active));
+  if (!zone) return;
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  const files = [...items].filter(it => it.type.startsWith('image/')).map(it => it.getAsFile()).filter(Boolean);
+  if (!files.length) return;
+  e.preventDefault();
+  zone.onFiles(files);
+});
 enablePasteUpload(els.artUploadZone, files => handleArtFile(files[0]));
 enablePasteUpload(els.kvUploadZone, files => handleKvFile(files[0]));
 enablePasteUpload(els.lineupUploadZone, files => handleLineupFiles(files));
