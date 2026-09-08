@@ -107,6 +107,89 @@
     return found;
   }
 
+  /* ---------------- Drive から入稿フォルダを読む ----------------
+   * ファイル一覧と更新日時だけで判定できるのは「ペアが揃っているか」と
+   * 「[ol前] が [ol後] より新しくないか」の2つ。425MB の .ai をブラウザに
+   * 落とすことはできないので、中身を見る4項目は Illustrator に任せる。
+   */
+
+  const SKIP_SUBFOLDERS = /^(old|旧|bak|backup|archive|アーカイブ|過去)$/i;
+
+  async function driveList(folderId) {
+    const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+    const fields = encodeURIComponent('files(id,name,mimeType,size,modifiedTime)');
+    const res = await GAAAT.google.apiFetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&pageSize=200` +
+      '&supportsAllDrives=true&includeItemsFromAllDrives=true');
+    return (await res.json()).files || [];
+  }
+
+  async function driveMeta(fileId) {
+    const res = await GAAAT.google.apiFetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}` +
+      '?fields=id,name,parents&supportsAllDrives=true');
+    return res.json();
+  }
+
+  // Illustrator のフォルダ選択でどこを辿ればいいかを出すために、親を上までたどる。
+  // マイドライブに置いたショートカット経由で Finder からも同じ並びで辿れる。
+  async function drivePath(folderId) {
+    const names = [];
+    let id = folderId;
+    for (let i = 0; i < 12 && id; i++) {
+      const m = await driveMeta(id);
+      names.unshift(m.name);
+      id = (m.parents && m.parents[0]) || null;
+    }
+    return names;
+  }
+
+  function pickLatestByModified(files) {
+    return files.slice().sort((a, b) =>
+      new Date(b.modifiedTime) - new Date(a.modifiedTime))[0];
+  }
+
+  async function loadFolder(folderId) {
+    const files = await driveList(folderId);
+    const ai = files.filter(f => /\.ai$/i.test(f.name));
+    const pre = ai.filter(f => f.name.indexOf('[ol前]') !== -1);
+    const post = ai.filter(f => f.name.indexOf('[ol後]') !== -1);
+    const subs = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+    const warnings = [];
+
+    if (pre.length > 1) warnings.push('[ol前] の .ai が ' + pre.length + ' 件あります。更新日時が最新のものを使いました。');
+    if (post.length > 1) warnings.push('[ol後] の .ai が ' + post.length + ' 件あります。更新日時が最新のものを使いました。');
+    subs.forEach(sub => {
+      if (SKIP_SUBFOLDERS.test(sub.name)) {
+        warnings.push('サブフォルダ「' + sub.name + '」の中は見ていません（同名の旧版が入っていて現物を決められないため）。');
+      }
+    });
+
+    const p = pre.length ? pickLatestByModified(pre) : null;
+    const q = post.length ? pickLatestByModified(post) : null;
+
+    const toEntry = (f, role) => f && {
+      role, fileName: f.name,
+      fileSizeBytes: Number(f.size || 0),
+      modified: String(f.modifiedTime).replace('.000Z', '').replace('Z', '')
+    };
+
+    const report = {
+      tool: 'gaaat-preflight', source: 'drive',
+      checkedAt: new Date().toISOString().slice(0, 19),
+      folderName: '', warnings,
+      files: {}
+    };
+    if (p) report.files.pre = toEntry(p, 'pre');
+    if (q) report.files.post = toEntry(q, 'post');
+    if (p && q) {
+      report.preModified = report.files.pre.modified;
+      report.postModified = report.files.post.modified;
+      report.preIsNewerThanPost = new Date(p.modifiedTime) > new Date(q.modifiedTime);
+    }
+    return { report, files, ai };
+  }
+
   /* ---------------- 判定 ---------------- */
 
   function sizeMatches(w, h, ew, eh, tol, allowRotate) {
@@ -130,6 +213,10 @@
 
     const pre = r.files && r.files.pre;
     const post = r.files && r.files.post;
+    const fromDrive = r.source === 'drive';
+    // .ai の中身を読まないと分からない項目。Illustrator を走らせるまで未判定にする
+    // （データが無いのを「0件＝OK」と読んでしまうと、一番危ない誤判定になる）。
+    const needsAi = msg => ({ status: 'info', title: msg, detail: 'Illustrator でスクリプトを実行すると判定できます（手順2）。' });
     const checks = [];
     const both = [];
     if (pre) both.push({ label: '[ol前]', f: pre });
@@ -164,7 +251,9 @@
     }
 
     /* 3. アウトライン化（[ol後]） */
-    if (post) {
+    if (fromDrive) {
+      checks.push(needsAi('テキストのアウトライン化'));
+    } else if (post) {
       if (post.liveTextCount === 0) {
         checks.push({
           status: 'ok', title: 'テキストのアウトライン化',
@@ -180,6 +269,7 @@
     }
 
     /* 4. 画像の埋め込み */
+    if (fromDrive) checks.push(needsAi('画像の埋め込み'));
     const linkedAll = [];
     both.forEach(({ label, f }) => {
       const n = (f.linkedImages && f.linkedImages.count) || 0;
@@ -187,7 +277,8 @@
         ((f.linkedImages && f.linkedImages.names) || []).forEach(name => linkedAll.push(label + ' ' + name));
       }
     });
-    if (linkedAll.length === 0) {
+    if (fromDrive) { /* 上で未判定を出している */ }
+    else if (linkedAll.length === 0) {
       checks.push({
         status: 'ok', title: '画像の埋め込み',
         detail: 'リンク状態の画像はありません（すべて埋め込み済み、または画像なし）。'
@@ -230,7 +321,7 @@
       status: (sizeLines.length === 0 || skipSize) ? 'info' : (sizeNg ? 'ng' : 'ok'),
       title: '仕上がりサイズ',
       detail: sizeLines.length === 0
-        ? 'アートボードの情報がありません。'
+        ? (fromDrive ? 'Illustrator でスクリプトを実行すると判定できます（手順2）。' : 'アートボードの情報がありません。')
         : skipSize
           ? 'サイズは確認しない設定です。実測値だけ出しています。'
           : '期待値 ' + opts.ew + ' × ' + opts.eh + ' mm（許容差 ±' + opts.tol + 'mm' +
@@ -261,14 +352,18 @@
     checks.push({
       status: bleedLines.length === 0 ? 'info' : (bleedNg ? 'ng' : 'ok'),
       title: '塗り足し・トンボ',
-      detail: 'アートボードの外にオブジェクトがどれだけ出ているかの実測値。' + opts.bleed + 'mm 以上あれば塗り足しありとみなします。',
-      lines: bleedLines.concat([
-        'トンボそのものの位置・線幅までは判定していません。数値が極端に大きい場合はトンボ込みです。'
-      ])
+      detail: (bleedLines.length === 0 && fromDrive)
+        ? 'Illustrator でスクリプトを実行すると判定できます（手順2）。'
+        : 'アートボードの外にオブジェクトがどれだけ出ているかの実測値。' + opts.bleed + 'mm 以上あれば塗り足しありとみなします。',
+      lines: bleedLines.length
+        ? bleedLines.concat(['トンボそのものの位置・線幅までは判定していません。数値が極端に大きい場合はトンボ込みです。'])
+        : []
     });
 
     /* 7. 金額 */
-    if (!pre) {
+    if (fromDrive) {
+      checks.push(needsAi('金額'));
+    } else if (!pre) {
       checks.push({ status: 'info', title: '金額', detail: '[ol前] が無いため、金額は確認できません（アウトライン後は文字を読めません）。' });
     } else if (!state.priceSet) {
       checks.push({ status: 'info', title: '金額', detail: '手順3で正しい金額を読み込むと、ここで突き合わせます。' });
@@ -305,7 +400,7 @@
     }
 
     /* 8. カラーモード（5種の不備の外だが、入稿不備の定番なので出しておく） */
-    const rgb = both.filter(({ f }) => f.documentColorSpace === 'RGB').map(({ label }) => label);
+    const rgb = fromDrive ? [] : both.filter(({ f }) => f.documentColorSpace === 'RGB').map(({ label }) => label);
     if (rgb.length) {
       checks.push({
         status: 'warn', title: 'カラーモード',
@@ -454,14 +549,16 @@
         els.btnSignIn.textContent = 'ログイン済み';
         els.btnSignIn.disabled = true;
         els.btnLoadSheet.disabled = false;
+        els.btnLoadFolder.disabled = false;
         els.googleStatus.className = 'status';
-        els.googleStatus.textContent = 'ログインしました。シートのURLを入れて「価格を読み込む」を押してください。';
+        els.googleStatus.textContent = 'ログインしました。入稿フォルダのURLを貼って「フォルダを確認する」を押してください。';
       },
       onSignedOut: () => {
         state.signedIn = false;
         els.btnSignIn.textContent = 'Googleにログイン';
         els.btnSignIn.disabled = false;
         els.btnLoadSheet.disabled = true;
+        els.btnLoadFolder.disabled = true;
       },
       onError: msg => { els.googleStatus.className = 'status err'; els.googleStatus.textContent = msg; }
     });
@@ -470,8 +567,9 @@
   function boot() {
     ['drop', 'filePicker', 'loaded', 'sizePreset', 'expW', 'expH', 'tolMm', 'allowRotate',
      'bleedMm', 'tabSheet', 'tabPaste', 'paneSheet', 'panePaste', 'btnSignIn', 'sheetUrl',
-     'btnLoadSheet', 'googleStatus', 'pasteArea', 'btnLoadPaste', 'extraPrices',
-     'priceStatus', 'results'].forEach(id => { els[id] = document.getElementById(id); });
+     'btnLoadSheet', 'googleStatus', 'sheetStatus', 'pasteArea', 'btnLoadPaste', 'extraPrices',
+     'priceStatus', 'results', 'folderUrl', 'btnLoadFolder', 'folderInfo']
+      .forEach(id => { els[id] = document.getElementById(id); });
 
     els.drop.addEventListener('click', () => els.filePicker.click());
     els.filePicker.addEventListener('change', () => {
@@ -527,21 +625,21 @@
     els.btnLoadSheet.addEventListener('click', async () => {
       const info = GAAAT.master.extractSheetsInfo(els.sheetUrl.value);
       if (!info) {
-        els.googleStatus.className = 'status err';
-        els.googleStatus.textContent = 'スプレッドシートのURLを入れてください（.../spreadsheets/d/… の形）。';
+        els.sheetStatus.className = 'status err';
+        els.sheetStatus.textContent = 'スプレッドシートのURLを入れてください（.../spreadsheets/d/… の形）。';
         return;
       }
-      els.googleStatus.className = 'status';
-      els.googleStatus.textContent = 'シートを読み込んでいます…';
+      els.sheetStatus.className = 'status';
+      els.sheetStatus.textContent = 'シートを読み込んでいます…';
       try {
         // ECサイトのシートは行も列も多いので、既定の A1:Z300 では価格列に届かない。
         const { sheetTitle, text } = await GAAAT.google.fetchSheetText(
           info.spreadsheetId, info.gid, 'A1:BZ2000');
-        els.googleStatus.textContent = 'シート「' + sheetTitle + '」を読みました。';
+        els.sheetStatus.textContent = 'シート「' + sheetTitle + '」を読みました。';
         setPriceSet(buildPriceSet(text), 'シート「' + sheetTitle + '」');
       } catch (e) {
-        els.googleStatus.className = 'status err';
-        els.googleStatus.textContent = String(e.message || e);
+        els.sheetStatus.className = 'status err';
+        els.sheetStatus.textContent = String(e.message || e);
       }
     });
 
@@ -549,7 +647,78 @@
       setPriceSet(buildPriceSet(els.pasteArea.value), '貼り付けたシート');
     });
 
+    els.btnLoadFolder.addEventListener('click', async () => {
+      const id = GAAAT.google.extractDriveFolderId(els.folderUrl.value);
+      if (!id) {
+        els.googleStatus.className = 'status err';
+        els.googleStatus.textContent = '入稿フォルダのURLを入れてください（.../drive/folders/… の形）。';
+        return;
+      }
+      els.googleStatus.className = 'status';
+      els.googleStatus.textContent = 'フォルダを読んでいます…';
+      els.btnLoadFolder.disabled = true;
+      try {
+        const { report, files, ai } = await loadFolder(id);
+        const path = await drivePath(id);
+        report.folderName = path[path.length - 1] || '';
+        state.report = report;
+        renderFolderInfo(path, files, ai);
+        els.googleStatus.textContent = 'フォルダを読みました。';
+        render();
+      } catch (e) {
+        els.googleStatus.className = 'status err';
+        els.googleStatus.textContent = String(e.message || e);
+      } finally {
+        els.btnLoadFolder.disabled = !state.signedIn;
+      }
+    });
+
     initGoogle();
+  }
+
+  // Illustrator のフォルダ選択でどこを辿ればいいかを出す。
+  // ここが分からないのが「面倒くささ」の実体なので、経路をそのまま見せる。
+  function renderFolderInfo(path, files, ai) {
+    const box = els.folderInfo;
+    box.textContent = '';
+
+    const h = document.createElement('h4');
+    h.textContent = 'Illustrator のフォルダ選択では、ここを辿ってください';
+    box.appendChild(h);
+
+    const crumb = document.createElement('div');
+    crumb.className = 'crumb';
+    crumb.appendChild(document.createTextNode('マイドライブ / '));
+    path.forEach((name, i) => {
+      if (i === path.length - 1) {
+        const b = document.createElement('b');
+        b.textContent = name;
+        crumb.appendChild(b);
+      } else {
+        crumb.appendChild(document.createTextNode(name + ' / '));
+      }
+    });
+    box.appendChild(crumb);
+
+    const ul = document.createElement('ul');
+    ai.forEach(f => {
+      const li = document.createElement('li');
+      const mb = Math.round(Number(f.size || 0) / 1048576);
+      li.textContent = f.name + (mb ? '（' + mb + ' MB）' : '');
+      ul.appendChild(li);
+    });
+    if (!ai.length) {
+      const li = document.createElement('li');
+      li.textContent = 'このフォルダの直下に .ai がありません。';
+      ul.appendChild(li);
+    }
+    box.appendChild(ul);
+
+    const note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = 'このフォルダの中の ' + files.length + ' 件のうち、直下の .ai だけを見ています。' +
+      'パソコン版 Google ドライブを入れていれば、Finder でも同じ並びで辿れます。';
+    box.appendChild(note);
   }
 
   document.addEventListener('DOMContentLoaded', boot);

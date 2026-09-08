@@ -152,6 +152,19 @@
   .check code{background:var(--panel-bg2);padding:1px 5px;border-radius:4px;color:var(--text);font-size:11px;}
 
   .status{font-size:12px;color:var(--muted);margin-top:8px;min-height:1.4em;}
+  #folderInfo:not(:empty){
+    margin-top:14px;border:1px solid var(--border);border-radius:8px;
+    padding:14px 16px;background:var(--panel-bg2);
+  }
+  #folderInfo h4{margin:0 0 8px;font-size:13px;color:var(--text);}
+  #folderInfo .crumb{
+    font-size:12px;color:var(--text);line-height:1.9;word-break:break-all;
+    background:#1a1c20;border-left:3px solid var(--accent);border-radius:4px;
+    padding:8px 12px;margin:0 0 10px;
+  }
+  #folderInfo .crumb b{color:var(--accent);}
+  #folderInfo ul{margin:0;padding-left:18px;font-size:12px;color:var(--muted);line-height:1.9;}
+  #folderInfo .note{font-size:11px;color:var(--muted);margin:10px 0 0;line-height:1.7;}
   .status.err{color:var(--ng);}
   .tabs{display:flex;gap:6px;margin-bottom:12px;}
   .tabs button{flex:1;font-weight:500;}
@@ -166,12 +179,30 @@
 
   <h1>GAAAT 入稿チェック</h1>
   <p class="sub">
-    Illustrator で <code>preflight.jsx</code> を実行して出てきた <code>_入稿チェック結果.json</code> を読み込むと、
-    サイズと金額をシートと突き合わせて合否を出します。作り方は手順1の中に書いてあります。
+    入稿フォルダのURLを貼ると、ペアの有無と新しさをその場で判定します。
+    アウトライン化・画像の埋め込み・金額・サイズは .ai の中身が要るので、Illustrator で出したJSONを足してください。
   </p>
 
   <fieldset>
-    <legend>手順1 — チェック結果を読み込む</legend>
+    <legend>手順1 — 入稿フォルダ</legend>
+    <div class="btn-row" style="margin-top:0;">
+      <button id="btnSignIn">Googleにログイン</button>
+    </div>
+    <label>入稿フォルダのURL（ブラウザでフォルダを開いてURLをコピー）</label>
+    <input type="text" id="folderUrl" placeholder="https://drive.google.com/drive/folders/…">
+    <div class="btn-row">
+      <button id="btnLoadFolder" class="primary" disabled>フォルダを確認する</button>
+    </div>
+    <div class="status" id="googleStatus"></div>
+    <div id="folderInfo"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>手順2 — Illustratorでの詳細チェック</legend>
+    <p class="hint" style="margin:0 0 12px;">
+      アウトライン化・画像の埋め込み・金額・サイズは、.ai の中身を読む必要があるので
+      Illustrator で1回スクリプトを走らせます。出てきたJSONをここに入れてください。
+    </p>
     <div id="drop">
       <strong>_入稿チェック結果.json をここにドラッグ&amp;ドロップ</strong>
       クリックしてファイルを選ぶこともできます
@@ -185,20 +216,22 @@
         <li>下のボタンで <code>preflight.jsx</code> を保存する（保存先はどこでもOK）</li>
         <li><b>Illustrator を起動する</b>（ファイルは開かなくてよい）</li>
         <li><b>ファイル → スクリプト → その他のスクリプト...</b> で、保存した <code>preflight.jsx</code> を選ぶ</li>
-        <li>フォルダを選ぶ画面が出るので、<b>入稿フォルダ</b>（<code>[ol前]</code>／<code>[ol後]</code> の .ai が入っているフォルダ）を選ぶ</li>
+        <li>フォルダを選ぶ画面が出るので、<b>手順1に出ている場所</b>を辿って入稿フォルダを選ぶ</li>
         <li>進捗バーが出る。入稿データは1本400MB以上あるので<b>数分かかる</b>。終わるまで待つ</li>
-        <li>同じフォルダに <code>_入稿チェック結果.json</code> ができるので、それを上の枠にドラッグ&amp;ドロップ</li>
+        <li>同じフォルダに <code>_入稿チェック結果.json</code> ができるので、上の枠にドラッグ&amp;ドロップ</li>
       </ol>
       <p class="hint">
-        Googleドライブの入稿フォルダをFinderから開けるようにする手順は、別紙の準備ガイドを参照してください。
-        スクリプトはファイルを保存せずに閉じるので、入稿データが書き換わることはありません。
+        毎回「その他のスクリプト...」を辿るのが面倒なら、<code>preflight.jsx</code> を
+        Illustrator の「スクリプト」フォルダに入れておくと、<b>ファイル → スクリプト</b> の
+        直下に出るようになります。スクリプトはファイルを保存せずに閉じるので、
+        入稿データが書き換わることはありません。
       </p>
       <a class="dl" href="preflight.jsx" download>preflight.jsx を保存</a>
     </details>
   </fieldset>
 
   <fieldset>
-    <legend>手順2 — 仕上がりサイズ</legend>
+    <legend>手順3 — 仕上がりサイズ</legend>
     <label>仕上がりサイズ</label>
     <select id="sizePreset">
       <optgroup label="A判（リーフレット・チラシ・ポスター）">
@@ -242,22 +275,19 @@
   </fieldset>
 
   <fieldset>
-    <legend>手順3 — 正しい金額（ECサイトのシート）</legend>
+    <legend>手順4 — 正しい金額（ECサイトのシート）</legend>
     <div class="tabs">
       <button id="tabSheet" class="on">Googleから読む</button>
       <button id="tabPaste">シートを貼り付ける</button>
     </div>
 
     <div id="paneSheet" class="pane on">
-      <div class="btn-row" style="margin-top:0;">
-        <button id="btnSignIn">Googleにログイン</button>
-      </div>
-      <label>スプレッドシートのURL（タブを開いた状態でコピーしてください）</label>
+      <label style="margin-top:0;">スプレッドシートのURL（タブを開いた状態でコピーしてください）</label>
       <input type="text" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/…/edit#gid=…">
       <div class="btn-row">
         <button id="btnLoadSheet" disabled>価格を読み込む</button>
       </div>
-      <div class="status" id="googleStatus"></div>
+      <div class="status" id="sheetStatus"></div>
     </div>
 
     <div id="panePaste" class="pane">
@@ -281,6 +311,6 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="../shared/google.js?v=6"></script>
 <script src="../shared/master-sheet.js?v=6"></script>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
