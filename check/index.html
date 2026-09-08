@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>GAAAT 入稿チェック</title>
+<style>
+  :root{
+    --panel-bg:#1c1e22;
+    --panel-bg2:#25282e;
+    --border:#3a3d44;
+    --text:#e8e9ec;
+    --muted:#9a9ea6;
+    --accent:#e2574c;
+    --ok:#4caf7d;
+    --ng:#e2574c;
+    --warn:#d8a642;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:#111214;
+    color:var(--text);
+    line-height:1.7;
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:28px 24px 80px;}
+  h1{font-size:18px;margin:0 0 4px;letter-spacing:.02em;}
+  .sub{font-size:12px;color:var(--muted);margin:0 0 24px;}
+  fieldset{
+    border:1px solid var(--border);
+    border-radius:8px;
+    margin:0 0 16px;
+    padding:16px 18px 18px;
+    background:var(--panel-bg);
+  }
+  legend{
+    font-size:11px;
+    letter-spacing:.08em;
+    color:var(--muted);
+    padding:0 6px;
+  }
+  label{display:block;font-size:12px;color:var(--muted);margin:12px 0 4px;}
+  label:first-of-type{margin-top:0;}
+  input[type=text], input[type=number], textarea, select{
+    width:100%;
+    background:var(--panel-bg2);
+    border:1px solid var(--border);
+    border-radius:6px;
+    color:var(--text);
+    font-size:13px;
+    padding:8px 10px;
+    font-family:inherit;
+    resize:vertical;
+  }
+  textarea{min-height:80px;line-height:1.6;font-size:12px;}
+  .row{display:flex;gap:10px;}
+  .row > div{flex:1;}
+  button{
+    padding:10px 16px;
+    border-radius:6px;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    letter-spacing:.02em;
+    background:var(--panel-bg2);
+    color:var(--text);
+    border:1px solid var(--border);
+    font-family:inherit;
+  }
+  button:hover:not(:disabled){background:#31353d;}
+  button:disabled{opacity:.45;cursor:not-allowed;}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  button.primary:hover:not(:disabled){background:#ef6357;}
+  .btn-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+  .hint{font-size:11px;color:var(--muted);margin-top:6px;}
+
+  #drop{
+    border:2px dashed var(--border);
+    border-radius:10px;
+    padding:30px 20px;
+    text-align:center;
+    color:var(--muted);
+    font-size:13px;
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  #drop.over{border-color:var(--accent);background:#221b1a;color:var(--text);}
+  #drop strong{display:block;color:var(--text);font-size:14px;margin-bottom:6px;}
+  #loaded{font-size:12px;margin-top:12px;color:var(--muted);}
+  #loaded b{color:var(--text);}
+
+  .verdict{
+    border-radius:10px;
+    padding:18px 20px;
+    margin:0 0 18px;
+    border:1px solid var(--border);
+    background:var(--panel-bg);
+  }
+  .verdict.ok{border-color:var(--ok);}
+  .verdict.ng{border-color:var(--ng);}
+  .verdict h2{margin:0;font-size:20px;letter-spacing:.04em;}
+  .verdict.ok h2{color:var(--ok);}
+  .verdict.ng h2{color:var(--ng);}
+  .verdict p{margin:6px 0 0;font-size:12px;color:var(--muted);}
+
+  .check{
+    border:1px solid var(--border);
+    border-left-width:4px;
+    border-radius:8px;
+    padding:12px 16px;
+    margin:0 0 10px;
+    background:var(--panel-bg);
+  }
+  .check.ok{border-left-color:var(--ok);}
+  .check.ng{border-left-color:var(--ng);}
+  .check.warn{border-left-color:var(--warn);}
+  .check.info{border-left-color:var(--border);}
+  .check .head{display:flex;align-items:baseline;gap:10px;}
+  .check .tag{
+    font-size:11px;font-weight:700;letter-spacing:.06em;
+    padding:1px 8px;border-radius:99px;flex:0 0 auto;
+  }
+  .check.ok .tag{background:rgba(76,175,125,.16);color:var(--ok);}
+  .check.ng .tag{background:rgba(226,87,76,.16);color:var(--ng);}
+  .check.warn .tag{background:rgba(216,166,66,.16);color:var(--warn);}
+  .check.info .tag{background:var(--panel-bg2);color:var(--muted);}
+  .check .title{font-size:14px;font-weight:600;}
+  .check .detail{font-size:12px;color:var(--muted);margin-top:6px;}
+  .check ul{margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--muted);}
+  .check li{margin:2px 0;}
+  .check code{background:var(--panel-bg2);padding:1px 5px;border-radius:4px;color:var(--text);font-size:11px;}
+
+  .status{font-size:12px;color:var(--muted);margin-top:8px;min-height:1.4em;}
+  .status.err{color:var(--ng);}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;}
+  .tabs button{flex:1;font-weight:500;}
+  .tabs button.on{background:var(--panel-bg2);border-color:var(--muted);color:var(--text);font-weight:700;}
+  .pane{display:none;}
+  .pane.on{display:block;}
+  .muted-box{background:var(--panel-bg2);border-radius:6px;padding:10px 12px;font-size:12px;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>GAAAT 入稿チェック</h1>
+  <p class="sub">
+    Illustrator で <code>check/preflight.jsx</code> を実行して出てきた
+    <code>_入稿チェック結果.json</code> を読み込むと、サイズと金額をシートと突き合わせて合否を出します。
+  </p>
+
+  <fieldset>
+    <legend>手順1 — チェック結果を読み込む</legend>
+    <div id="drop">
+      <strong>_入稿チェック結果.json をここにドラッグ&amp;ドロップ</strong>
+      クリックしてファイルを選ぶこともできます
+    </div>
+    <input type="file" id="filePicker" accept=".json,application/json" hidden>
+    <div id="loaded"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>手順2 — 仕上がりサイズ</legend>
+    <label>仕上がりサイズ</label>
+    <select id="sizePreset">
+      <optgroup label="A判（リーフレット・チラシ・ポスター）">
+        <option value="594x841">A1（594 × 841 mm）</option>
+        <option value="420x594">A2（420 × 594 mm）</option>
+        <option value="297x420">A3（297 × 420 mm）</option>
+        <option value="210x297" selected>A4（210 × 297 mm）</option>
+        <option value="148x210">A5（148 × 210 mm）</option>
+        <option value="105x148">A6（105 × 148 mm）</option>
+      </optgroup>
+      <optgroup label="B判・JIS（チラシ・ポスターに多い）">
+        <option value="728x1030">B1（728 × 1030 mm）</option>
+        <option value="515x728">B2（515 × 728 mm）</option>
+        <option value="364x515">B3（364 × 515 mm）</option>
+        <option value="257x364">B4（257 × 364 mm）</option>
+        <option value="182x257">B5（182 × 257 mm）</option>
+        <option value="128x182">B6（128 × 182 mm）</option>
+      </optgroup>
+      <optgroup label="その他">
+        <option value="100x148">ハガキ・DM（100 × 148 mm）</option>
+        <option value="91x55">名刺（91 × 55 mm）</option>
+        <option value="custom">自分で入力する</option>
+        <option value="none">サイズは確認しない（実測値だけ出す）</option>
+      </optgroup>
+    </select>
+    <p class="hint">A4三つ折りリーフレット（開いて 297 × 210 mm）は「A4」のままでOKです。下の「縦横が入れ替わっていても正とみなす」が効きます。ノベルティなど決まった判型が無いものは「自分で入力する」か「サイズは確認しない」を選んでください。</p>
+    <div class="row" style="margin-top:12px;">
+      <div><label>幅 (mm)</label><input type="number" id="expW" value="210" step="0.1"></div>
+      <div><label>高さ (mm)</label><input type="number" id="expH" value="297" step="0.1"></div>
+      <div><label>許容差 (mm)</label><input type="number" id="tolMm" value="0.5" step="0.1"></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+      <input type="checkbox" id="allowRotate" checked style="width:auto;">
+      縦横が入れ替わっていても正とみなす
+    </label>
+    <div class="row" style="margin-top:12px;">
+      <div><label>必要な塗り足し (mm)</label><input type="number" id="bleedMm" value="3" step="0.5"></div>
+      <div></div><div></div>
+    </div>
+    <p class="hint">塗り足しは、アートボードの外にオブジェクトがどれだけはみ出しているかの実測値で見ます。</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>手順3 — 正しい金額（ECサイトのシート）</legend>
+    <div class="tabs">
+      <button id="tabSheet" class="on">Googleから読む</button>
+      <button id="tabPaste">シートを貼り付ける</button>
+    </div>
+
+    <div id="paneSheet" class="pane on">
+      <div class="btn-row" style="margin-top:0;">
+        <button id="btnSignIn">Googleにログイン</button>
+      </div>
+      <label>スプレッドシートのURL（タブを開いた状態でコピーしてください）</label>
+      <input type="text" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/…/edit#gid=…">
+      <div class="btn-row">
+        <button id="btnLoadSheet" disabled>価格を読み込む</button>
+      </div>
+      <div class="status" id="googleStatus"></div>
+    </div>
+
+    <div id="panePaste" class="pane">
+      <label>シートの範囲をコピーして貼り付け（見出し行を含めてください）</label>
+      <textarea id="pasteArea" placeholder="作品名	価格(税込)	…"></textarea>
+      <div class="btn-row">
+        <button id="btnLoadPaste">価格を読み込む</button>
+      </div>
+    </div>
+
+    <label style="margin-top:14px;">誌面に載ってよい金額を手で足す（カンマ区切り・任意）</label>
+    <input type="text" id="extraPrices" placeholder="550, 1100">
+    <p class="hint">送料や手数料など、作品価格ではないがリーフレットに載る金額をここに入れると、不一致として出なくなります。</p>
+    <div class="status" id="priceStatus"></div>
+  </fieldset>
+
+  <div id="results"></div>
+
+</div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="../shared/google.js?v=6"></script>
+<script src="../shared/master-sheet.js?v=6"></script>
+<script src="app.js?v=2"></script>
+</body>
+</html>
