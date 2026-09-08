@@ -152,6 +152,7 @@
   .check code{background:var(--panel-bg2);padding:1px 5px;border-radius:4px;color:var(--text);font-size:11px;}
 
   .status{font-size:12px;color:var(--muted);margin-top:8px;min-height:1.4em;}
+  #projectFilter:not([hidden]){margin-top:10px;}
   #projectList:not(:empty){
     margin-top:14px;border:1px solid var(--border);border-radius:8px;
     background:var(--panel-bg2);max-height:320px;overflow-y:auto;
@@ -208,6 +209,7 @@
     <div class="btn-row">
       <button id="btnFindProjects" disabled>案件を一覧から選ぶ</button>
     </div>
+    <input type="text" id="projectFilter" placeholder="依頼ID・案件名で絞り込む（例: R268 / 花の慶次 / ポスター）" hidden>
     <label>または、入稿フォルダのURLを貼る</label>
     <input type="text" id="folderUrl" placeholder="https://drive.google.com/drive/folders/…">
     <div class="btn-row">
@@ -336,6 +338,6 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="../shared/google.js?v=6"></script>
 <script src="../shared/master-sheet.js?v=6"></script>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

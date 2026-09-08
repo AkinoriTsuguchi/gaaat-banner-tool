@@ -23,6 +23,7 @@
     report: null,
     priceSet: null,      // Set<number>
     priceSource: '',
+    projects: [],
     signedIn: false
   };
 
@@ -154,22 +155,36 @@
     const fields = encodeURIComponent('files(id,name,parents,modifiedTime)');
     const res = await GAAAT.google.apiFetch(
       `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}` +
-      '&orderBy=modifiedTime desc&pageSize=100' +
+      '&orderBy=modifiedTime desc&pageSize=200' +
       '&supportsAllDrives=true&includeItemsFromAllDrives=true');
-    const files = ((await res.json()).files || []).filter(f => /\.ai$/i.test(f.name));
+    const all = (await res.json()).files || [];
+    const files = all.filter(f => /\.ai$/i.test(f.name));
 
-    // 同じフォルダに複数の [ol前] があっても案件は1つ。親フォルダでまとめる。
-    const byParent = new Map();
+    // 案件名でまとめる。親フォルダで束ねると、old/ の中の同名ファイルが
+    // 別フォルダとして数えられ、同じ案件が2度3度並ぶ（実データで確認済み）。
+    // 同名が複数あるときは更新が最新のものを採る＝現物側になる。
+    const byLabel = new Map();
     files.forEach(f => {
       const parent = f.parents && f.parents[0];
-      if (!parent || byParent.has(parent)) return;
-      byParent.set(parent, {
-        parentId: parent,
-        label: f.name.replace('[ol前]', '').replace(/\.ai$/i, ''),
-        modifiedTime: f.modifiedTime
-      });
+      if (!parent) return;
+      const label = f.name.replace('[ol前]', '').replace(/\.ai$/i, '');
+      const prev = byLabel.get(label);
+      if (prev && new Date(prev.modifiedTime) >= new Date(f.modifiedTime)) return;
+      byLabel.set(label, { parentId: parent, label, modifiedTime: f.modifiedTime });
     });
-    return Array.from(byParent.values());
+    const list = Array.from(byLabel.values())
+      .sort((a, b) => new Date(b.modifiedTime) - new Date(a.modifiedTime));
+
+    // .ai が無くPDFだけの案件は一覧に出せない（チェックは .ai の中身を読むため）。
+    // 黙って消すと「あの案件が出てこない」になるので、件数だけ伝える。
+    const pdfOnly = new Set();
+    all.forEach(f => {
+      if (/\.ai$/i.test(f.name)) return;
+      const label = f.name.replace('[ol前]', '').replace(/\.[^.]+$/, '');
+      if (!byLabel.has(label)) pdfOnly.add(label);
+    });
+    list.pdfOnlyCount = pdfOnly.size;
+    return list;
   }
 
   // Finder / Illustrator のフォルダ選択にそのまま貼れる絶対パスを組み立てる。
@@ -611,7 +626,7 @@
     ['drop', 'filePicker', 'loaded', 'sizePreset', 'expW', 'expH', 'tolMm', 'allowRotate',
      'bleedMm', 'tabSheet', 'tabPaste', 'paneSheet', 'panePaste', 'btnSignIn', 'sheetUrl',
      'btnLoadSheet', 'googleStatus', 'sheetStatus', 'pasteArea', 'btnLoadPaste', 'extraPrices',
-     'priceStatus', 'results', 'folderUrl', 'btnLoadFolder', 'folderInfo', 'btnFindProjects', 'projectList']
+     'priceStatus', 'results', 'folderUrl', 'btnLoadFolder', 'folderInfo', 'btnFindProjects', 'projectList', 'projectFilter']
       .forEach(id => { els[id] = document.getElementById(id); });
 
     els.drop.addEventListener('click', () => els.filePicker.click());
@@ -720,34 +735,69 @@
       openFolder(id);
     });
 
+    // 絞り込みは読み込み済みの一覧に対してその場でかける（再検索はしない）。
+    // 依頼ID（R268）でも案件名の一部でも引けるように、単純な部分一致にしてある。
+    function renderProjects() {
+      const q = els.projectFilter.value.trim().toLowerCase();
+      const hits = q
+        ? state.projects.filter(pj => pj.label.toLowerCase().indexOf(q) !== -1)
+        : state.projects;
+
+      els.projectList.textContent = '';
+      const h = document.createElement('h4');
+      h.textContent = q
+        ? '「' + els.projectFilter.value.trim() + '」に一致 ' + hits.length + ' 件'
+        : '更新が新しい順（' + hits.length + '件）。選ぶとそのフォルダを読みます。';
+      els.projectList.appendChild(h);
+
+      if (!q && state.projects.pdfOnlyCount) {
+        const n = document.createElement('h4');
+        n.textContent = 'PDFしか無い案件 ' + state.projects.pdfOnlyCount +
+          ' 件は出していません（チェックには .ai が要ります）。';
+        els.projectList.appendChild(n);
+      }
+
+      if (!hits.length) {
+        const b = document.createElement('h4');
+        b.textContent = '一致する案件がありません。依頼ID（R268 など）か案件名の一部で試してください。';
+        els.projectList.appendChild(b);
+        return;
+      }
+      hits.forEach(pj => {
+        const b = document.createElement('button');
+        b.className = 'proj';
+        b.textContent = pj.label;
+        const small = document.createElement('small');
+        small.textContent = '更新 ' + String(pj.modifiedTime).slice(0, 10);
+        b.appendChild(small);
+        b.addEventListener('click', () => {
+          els.projectList.textContent = '';
+          els.projectFilter.hidden = true;
+          openFolder(pj.parentId);
+        });
+        els.projectList.appendChild(b);
+      });
+    }
+
+    els.projectFilter.addEventListener('input', renderProjects);
+
     els.btnFindProjects.addEventListener('click', async () => {
       els.googleStatus.className = 'status';
       els.googleStatus.textContent = '案件を探しています…';
       els.btnFindProjects.disabled = true;
       try {
-        const projects = await searchProjects();
-        els.projectList.textContent = '';
-        if (!projects.length) {
+        state.projects = await searchProjects();
+        if (!state.projects.length) {
+          els.projectList.textContent = '';
+          els.projectFilter.hidden = true;
           els.googleStatus.textContent = '[ol前] の .ai が見つかりませんでした。';
           return;
         }
-        const h = document.createElement('h4');
-        h.textContent = '更新が新しい順（' + projects.length + '件）。選ぶとそのフォルダを読みます。';
-        els.projectList.appendChild(h);
-        projects.forEach(pj => {
-          const b = document.createElement('button');
-          b.className = 'proj';
-          b.textContent = pj.label;
-          const small = document.createElement('small');
-          small.textContent = '更新 ' + String(pj.modifiedTime).slice(0, 10);
-          b.appendChild(small);
-          b.addEventListener('click', () => {
-            els.projectList.textContent = '';
-            openFolder(pj.parentId);
-          });
-          els.projectList.appendChild(b);
-        });
-        els.googleStatus.textContent = '案件が ' + projects.length + ' 件見つかりました。';
+        els.projectFilter.hidden = false;
+        els.projectFilter.value = '';
+        renderProjects();
+        els.projectFilter.focus();
+        els.googleStatus.textContent = '案件が ' + state.projects.length + ' 件見つかりました。絞り込めます。';
       } catch (e) {
         els.googleStatus.className = 'status err';
         els.googleStatus.textContent = String(e.message || e);
