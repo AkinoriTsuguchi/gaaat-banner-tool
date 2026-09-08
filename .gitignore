@@ -2,3 +2,13 @@
 *.jpg
 *.jpeg
 *.png
+
+# 参照用の実物（レイアウトを実物に寄せるための資料）だけは追跡する
+!docs/reference/
+!docs/reference/*
+
+# リーフレットツールの同梱素材（購入手順の挿絵・ブランドQR）は
+# アプリの一部なので、*.png の除外から戻す。これが無いとホスティング先で
+# 挿絵とQRだけが欠けたリーフレットが出てしまう。
+!leaflet/assets/
+!leaflet/assets/*.png

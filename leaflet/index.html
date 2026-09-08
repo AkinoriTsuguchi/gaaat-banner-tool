@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>GAAAT リーフレット自動生成ツール（A4三つ折り）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Serif+JP:wght@400;600;700&family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --panel-bg:#1c1e22;
+    --panel-bg2:#25282e;
+    --border:#3a3d44;
+    --text:#e8e9ec;
+    --muted:#9a9ea6;
+    --accent:#e2574c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:#111214;
+    color:var(--text);
+    display:flex;
+    min-height:100vh;
+  }
+  #panel{
+    width:440px;
+    min-width:440px;
+    background:var(--panel-bg);
+    padding:24px;
+    overflow-y:auto;
+    height:100vh;
+    border-right:1px solid var(--border);
+  }
+  #stage{
+    flex:1;
+    padding:24px;
+    overflow:auto;
+    height:100vh;
+  }
+  h1{font-size:16px;margin:0 0 4px;letter-spacing:.02em;}
+  .sub{font-size:12px;color:var(--muted);margin:0 0 20px;line-height:1.6;}
+  fieldset{
+    border:1px solid var(--border);
+    border-radius:8px;
+    margin:0 0 16px;
+    padding:14px;
+  }
+  legend{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--muted);
+    padding:0 6px;
+  }
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;}
+  label:first-of-type{margin-top:0;}
+  input[type=text], input[type=number], input[type=date], textarea, select, input[type=file]{
+    width:100%;
+    background:var(--panel-bg2);
+    border:1px solid var(--border);
+    border-radius:6px;
+    color:var(--text);
+    font-size:13px;
+    padding:8px 10px;
+    font-family:inherit;
+    resize:vertical;
+  }
+  textarea{min-height:64px;line-height:1.6;}
+  .row{display:flex;gap:8px;}
+  .row > div{flex:1;}
+  button{
+    width:100%;
+    padding:11px;
+    border:none;
+    border-radius:6px;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    letter-spacing:.02em;
+    background:var(--panel-bg2);
+    color:var(--text);
+    border:1px solid var(--border);
+  }
+  button:hover:not(:disabled){background:#31353d;}
+  button:disabled{opacity:.45;cursor:not-allowed;}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  button.primary:hover:not(:disabled){background:#ef6357;}
+  .btn-row{display:flex;gap:8px;margin-top:8px;}
+  .btn-row button{flex:1;}
+  .hint{font-size:11px;color:var(--muted);line-height:1.6;margin:8px 0 0;}
+  /* 固定文言の確認用表示。編集させないので input ではなく素のテキストで出す。 */
+  .fixed-copy{margin-top:10px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;background:rgba(127,127,127,.06);}
+  .fixed-copy h4{margin:0 0 4px;font-size:12px;letter-spacing:.04em;}
+  .fixed-copy section + section{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
+  .fixed-copy p{margin:0 0 4px;font-size:11px;line-height:1.7;color:var(--muted);}
+  .fixed-copy p.en{font-style:italic;opacity:.8;}
+  .fixed-copy ol{margin:0;padding-left:18px;}
+  .fixed-copy li{font-size:11px;line-height:1.7;color:var(--muted);margin-bottom:5px;}
+  .hint.error{color:#ff8b80;}
+  .check{
+    display:flex;
+    align-items:flex-start;
+    gap:8px;
+    font-size:12px;
+    color:var(--text);
+    margin:8px 0 0;
+    cursor:pointer;
+  }
+  .check input{margin:2px 0 0;flex:none;}
+  .checkgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;}
+
+  /* ---- 作品リスト ---- */
+  #artList{
+    margin-top:10px;
+    max-height:420px;
+    overflow-y:auto;
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:6px;
+    background:#17191d;
+  }
+  .art-item{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:6px;
+    border-radius:5px;
+    background:var(--panel-bg2);
+    margin-bottom:5px;
+    border:1px solid transparent;
+  }
+  .art-item:last-child{margin-bottom:0;}
+  .art-item.dragging{opacity:.4;}
+  .art-item.drop-before{border-top-color:var(--accent);}
+  .art-item.drop-after{border-bottom-color:var(--accent);}
+  .art-item.off{opacity:.45;}
+  .art-item .handle{
+    cursor:grab;
+    color:var(--muted);
+    font-size:15px;
+    line-height:1;
+    padding:0 2px;
+    user-select:none;
+  }
+  .art-item .thumb{
+    width:38px;height:38px;flex:none;
+    border-radius:4px;
+    background:#0e0f11 center/contain no-repeat;
+    border:1px solid var(--border);
+    cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    font-size:9px;color:var(--muted);text-align:center;
+  }
+  .art-item .meta{flex:1;min-width:0;}
+  .art-item .meta .name{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .art-item .meta .detail{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .art-item input[type=checkbox]{flex:none;}
+
+  /* ---- ステージ ---- */
+  .face{margin-bottom:28px;}
+  .face h2{
+    font-size:12px;
+    font-weight:600;
+    color:var(--muted);
+    margin:0 0 8px;
+    letter-spacing:.06em;
+  }
+  .face canvas{
+    width:100%;
+    height:auto;
+    display:block;
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:4px;
+  }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <h1>GAAAT リーフレット自動生成ツール</h1>
+  <p class="sub">
+    A4横・三つ折り（表裏2面）のリーフレットを、案件シートの作品情報から自動で組版します。<br>
+    作品は掲載する／しないを選べ（初期状態はすべて掲載）、ドラッグで並び順を入れ替えられます。
+  </p>
+
+  <fieldset>
+    <legend>ECシートから読み込み</legend>
+    <p class="hint" id="sheetsSetupNote"></p>
+    <button type="button" id="signInBtn">Googleでログイン</button>
+    <p class="hint" id="authStatus" style="display:none;"></p>
+
+    <label>スプレッドシートURL（作品一覧のタブを開いた状態で、#gid=… 付きのURLを貼り付け）</label>
+    <input type="text" id="sheetsUrlInput" placeholder="https://docs.google.com/spreadsheets/d/xxxx/edit#gid=123456">
+    <button type="button" id="loadSheetsBtn" style="margin-top:8px;">スプレッドシートを読み込む</button>
+    <p class="hint" id="sheetsStatus" style="display:none;"></p>
+
+    <label>または、シートの範囲をコピーして貼り付け</label>
+    <textarea id="pasteArea" rows="3" placeholder="作品一覧の見出し行（「作品名」を含む行）から最終行までを選択してコピー（⌘C）し、ここに貼り付けてください。"></textarea>
+    <button type="button" id="applyPasteBtn" style="margin-top:8px;">貼り付けた内容を読み込む</button>
+    <p class="hint">見出しの文字（作品名／アーティスト名／価格（税込）／サイズ／画像リンク（ドライブ）など）を手がかりに列を判別するので、案件によって列の並びや数が違っても読み込めます。「記入例→」の行は自動で除外します。</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>作品画像</legend>
+    <label>作品画像フォルダ（Googleドライブ）のURL または フォルダID</label>
+    <input type="text" id="driveFolderInput" placeholder="https://drive.google.com/drive/folders/xxxx">
+    <button type="button" id="loadDriveFolderBtn">フォルダから作品画像を取得</button>
+    <p class="hint" id="driveStatus" style="display:none;"></p>
+    <p class="hint">フォルダを読み込むと、そのまま作品画像の取得まで一気に走ります。作品名ごとのサブフォルダに分かれていても追いかけます。シートの「画像リンク（ドライブ）」列がURLならそこから直接、ファイル名や作品名だけならフォルダ内のファイル名・サブフォルダ名と突き合わせて取得します。うまく当たらない作品は、下のリストのサムネイルをクリックすると個別に差し替えられます。</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>作品リスト（掲載する作品・並び順）</legend>
+    <div class="btn-row">
+      <button type="button" id="selectAllBtn">全て掲載</button>
+      <button type="button" id="deselectAllBtn">全て非掲載</button>
+      <button type="button" id="resetOrderBtn">並び順を戻す</button>
+    </div>
+    <div id="artList"></div>
+    <p class="hint" id="artListHint">まだ作品が読み込まれていません。</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>QRコード（アップロード）</legend>
+    <label>LIST面に載せるQRコード（Shopifyで発行したQR画像）</label>
+    <input type="file" id="qrListInput" accept="image/*">
+    <label>QRの横に入れるボタン文言</label>
+    <input type="text" id="qrListCaption" value="ご購入はこちら">
+    <label>QRの下に入れる注意書き</label>
+    <textarea id="qrListNote" rows="2">作品購入ページURLは、会期終了までSNS等に公開しませんようお願いいたします。</textarea>
+    <p class="hint">GAAAT面の下部に並ぶ4つのQR（web / EC / X / Instagram）は毎回同じもので固定です。同梱してあるので操作は不要です。</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>表紙（外面・右パネル）</legend>
+    <label>展示会タイトル</label>
+    <textarea id="coverTitle" rows="2">Syoyo
+1st SOLO EXHIBITION</textarea>
+    <label>サブタイトル・キャッチコピー（任意）</label>
+    <input type="text" id="coverSubtitle" value="">
+    <label>コピーライト</label>
+    <input type="text" id="copyright" value="©GAAAT">
+    <label>表紙の背景画像（任意）</label>
+    <input type="file" id="coverImageInput" accept="image/*">
+    <label>表紙レイアウト</label>
+    <select id="coverTemplate">
+      <option value="hero">A 作品主役型（syoyo）</option>
+      <option value="verticalJa">C 和文縦組み型（サイボーグ009）</option>
+      <option value="condensed">E 大型コンデンス型（ZEENCHIN）</option>
+      <option value="lockup">F ロゴロックアップ型（ウルトラマン）</option>
+    </select>
+    <label class="check"><input type="checkbox" id="coverAuto" checked><span>表紙画像の配色からレイアウトを自動選択する</span></label>
+    <p class="hint">過去のリーフレット表紙から起こした4パターンです。プルダウンを手で変えると自動選択はオフになります。Fは作品画像を使わず、版元支給のIPロゴとGAAATロゴを「×」で組みます（画像が使えずロゴのみ支給の案件用）。<strong>額縁やフレームなどの装飾はツール側では一切描きません</strong>（支給素材にすでに額が写っている場合に二重になるため）。</p>
+    <p class="hint"><strong>画像は「デザインのみ」のデータをご用意ください。</strong>額装が写り込んだものや、まわりに余白が入ったもの（物撮りなど）は避けてください。ツール側では作品を一切トリミングしないので、余白はそのまま版面の余白になり、額付きの素材は誌面の枠と二重になります。TIFでもそのまま読み込めます。</p>
+    <label>IPロゴ（Fロゴロックアップ型で使用）</label>
+    <input type="file" id="ipLogoInput" accept="image/*">
+    <label class="check"><input type="checkbox" id="coverDark"><span>表紙を暗い配色にする（背景画像に文字を重ねる場合はこちら）</span></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>外面のテキスト（固定）</legend>
+    <p class="hint">「GAAAT / Metal Canvas Art とは」と「作品購入の仕方」は、既存リーフレットと同じ文言で毎回固定です。案件ごとの編集はできません（内容の変更が必要になったら app.js の <code>BOILERPLATE</code> を直します）。実際に刷られる文言は以下のとおりです。</p>
+    <div class="fixed-copy" id="boilerplatePreview"></div>
+    <label>お問い合わせ・注釈（任意）</label>
+    <textarea id="footNote" rows="2"></textarea>
+    <p class="hint">この欄だけは案件ごとに入れられます。裏表紙の下部に小さく入ります。</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>内面（LIST）のレイアウト</legend>
+    <label>LIST面の見出し</label>
+    <input type="text" id="listHeading" value="LIST">
+    <div class="row">
+      <div>
+        <label>1パネルあたりの列数</label>
+        <select id="colsPerPanel">
+          <option value="1">1列</option>
+          <option value="2" selected>2列</option>
+          <option value="3">3列</option>
+        </select>
+      </div>
+      <div>
+        <label>作品画像の高さ比率</label>
+        <select id="imageRatio">
+          <option value="0.55">低め（文字を多く）</option>
+          <option value="0.65" selected>標準</option>
+          <option value="0.75">高め（画像を大きく）</option>
+        </select>
+      </div>
+    </div>
+    <p class="hint">列は折り位置をまたがないようパネル単位で組まれます。作品は左上から右へ、行が埋まったら次の行へと並びます。</p>
+    <p class="hint" id="layoutWarning" style="display:none;"></p>
+
+    <label>作品カードに載せる項目</label>
+    <div class="checkgrid">
+      <label class="check"><input type="checkbox" id="fldArtist" checked><span>アーティスト名</span></label>
+      <label class="check"><input type="checkbox" id="fldSize" checked><span>サイズ</span></label>
+      <label class="check"><input type="checkbox" id="fldPriceIn" checked><span>価格（税込）</span></label>
+      <label class="check"><input type="checkbox" id="fldPriceEx"><span>価格（税抜）</span></label>
+      <label class="check"><input type="checkbox" id="fldEdition"><span>エディション数</span></label>
+      <label class="check"><input type="checkbox" id="fldMaterial"><span>画材／技法</span></label>
+      <label class="check"><input type="checkbox" id="fldCode"><span>作品番号</span></label>
+      <label class="check"><input type="checkbox" id="fldDesc"><span>作品説明</span></label>
+    </div>
+
+    <label class="check" style="margin-top:12px;"><input type="checkbox" id="showArtistBio"><span>アーティスト紹介ブロックを内面の下部に入れる</span></label>
+    <label>アーティスト名（紹介ブロック）</label>
+    <input type="text" id="artistBioName" value="">
+    <label>アーティスト紹介文</label>
+    <textarea id="artistBioText" rows="4"></textarea>
+  </fieldset>
+
+  <fieldset>
+    <legend>用紙・配色</legend>
+    <label>折り方</label>
+    <select id="foldType">
+      <option value="roll" selected>巻き三つ折り（内側パネルを細く：99.5 / 99.5 / 98mm）</option>
+      <option value="equal">均等三つ折り（99 / 99 / 99mm）</option>
+    </select>
+    <div class="row">
+      <div>
+        <label>書き出し解像度（dpi）</label>
+        <select id="dpi">
+          <option value="150">150（社内確認用）</option>
+          <option value="300">300</option>
+          <option value="350" selected>350（入稿用）</option>
+        </select>
+      </div>
+      <div>
+        <label>塗り足し（mm）</label>
+        <input type="number" id="bleed" value="3" min="0" max="10" step="1">
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" id="showTrim" checked><span>トンボ（トリムマーク）を付ける</span></label>
+    <p class="hint">画面プレビューは軽さ優先で低解像度で描いています。ここで選んだdpiは書き出し時にだけ使われます（レイアウトは同一）。</p>
+    <label class="check"><input type="checkbox" id="showFold" checked><span>折り位置のガイド線を付ける（確認用。入稿時は外してください）</span></label>
+
+    <div class="row" style="margin-top:12px;">
+      <div>
+        <label>背景色</label>
+        <input type="color" id="colBg" value="#ffffff" style="height:36px;padding:2px;">
+      </div>
+      <div>
+        <label>文字色</label>
+        <input type="color" id="colText" value="#1a1a1a" style="height:36px;padding:2px;">
+      </div>
+      <div>
+        <label>アクセント</label>
+        <input type="color" id="colAccent" value="#c8102e" style="height:36px;padding:2px;">
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>書き出し</legend>
+    <button type="button" class="primary" id="downloadPdfBtn">PDFで書き出す（表裏2ページ）</button>
+    <div class="btn-row">
+      <button type="button" id="downloadInnerBtn">内面PNG</button>
+      <button type="button" id="downloadOuterBtn">外面PNG</button>
+    </div>
+    <p class="hint" id="exportStatus" style="display:none;"></p>
+    <p class="hint">PDFはA4横（塗り足し込みのサイズ）で1ページ目＝内面（LIST）、2ページ目＝外面になります。印刷所に渡す際は「折り位置のガイド線」のチェックを外して書き出してください。</p>
+  </fieldset>
+</div>
+
+<div id="stage">
+  <div class="face">
+    <h2>内面（開いた面）／ LIST — 左から順に読む3パネル</h2>
+    <canvas id="canvasInner"></canvas>
+  </div>
+  <div class="face">
+    <h2>外面／ 左＝折り込み（作品購入の仕方）・中＝裏表紙・右＝表紙</h2>
+    <canvas id="canvasOuter"></canvas>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- TIFFはブラウザが標準で表示できない。支給素材のマスターがTIFのことがあるので、
+     読み込み時にこれでデコードしてCanvasに載せる。 -->
+<script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="logo.js"></script>
+<script src="app.js?v=20"></script>
+</body>
+</html>
