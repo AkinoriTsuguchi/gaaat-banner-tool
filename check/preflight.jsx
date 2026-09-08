@@ -35,6 +35,13 @@
   // どれが現物か決められなくなるため（実データで4世代・12ファイルを確認済み）。
   var MONEY_RE = /(?:[¥￥\\]\s*[0-9０-９][0-9０-９,，]*)|(?:[0-9０-９][0-9０-９,，]*\s*円)/g;
   var TOMBO_HINTS = ['トンボ', 'とんぼ', 'ﾄﾝﾎﾞ', 'crop', 'trim', 'register', 'ﾄﾘﾑ'];
+  // 旧版が入っているフォルダ。同名ファイルが何世代も入っていて現物を決められない。
+  var SKIP_FOLDER_RE = /^(old|旧|bak|backup|archive|アーカイブ|過去|使わない)$/i;
+  // 1つ2つ上のフォルダを選ばれたときの救済。深く掘るのは**やらない**:
+  // Googleドライブはフォルダを開くたびに通信するので、実測で1フォルダ約0.5秒かかる。
+  // 上の階層から全部舐めると240フォルダで2分たっても案件に届かなかった。
+  // 深いところから探すのはブラウザ側（Drive APIの全文検索）の仕事にしてある。
+  var SEARCH = { maxDepth: 2, maxFolders: 60, maxResults: 20, budgetMs: 20000 };
 
   function ptToMm(pt) { return pt * PT_TO_MM; }
   function round2(n) { return Math.round(n * 100) / 100; }
@@ -117,6 +124,95 @@
       if (files[i].modified.getTime() > best.modified.getTime()) best = files[i];
     }
     return best;
+  }
+
+  /* ---------- 選ばれたフォルダの下から入稿データを探す ----------
+   * 案件フォルダは深いところにあり、毎回6階層たどらせるのは運用に乗らない。
+   * 直下に [ol前]/[ol後] が無ければ、下を掘って候補を出す。
+   * 見つかったフォルダの中はそれ以上掘らない（old/ の旧版を拾わないため）。
+   */
+  function findCandidateFolders(root, onProgress) {
+    var results = [];
+    var visited = 0;
+    var stopped = false;
+    var deadline = (new Date()).getTime() + SEARCH.budgetMs;
+
+    function walk(folder, depth) {
+      if (stopped || depth > SEARCH.maxDepth) return;
+      visited++;
+      if (visited > SEARCH.maxFolders) { stopped = true; return; }
+      if ((new Date()).getTime() > deadline) { stopped = true; return; }
+      if (onProgress && visited % 5 === 0) onProgress(visited, results.length);
+
+      var entries;
+      try { entries = folder.getFiles(); } catch (e) { return; }
+
+      var hasPre = false, hasPost = false, subs = [];
+      for (var i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        if (e instanceof Folder) {
+          if (!SKIP_FOLDER_RE.test(decodeName(e))) subs.push(e);
+          continue;
+        }
+        var name = decodeName(e);
+        if (!/\.ai$/i.test(name)) continue;
+        if (name.indexOf('[ol前]') !== -1) hasPre = true;
+        else if (name.indexOf('[ol後]') !== -1) hasPost = true;
+      }
+
+      if (hasPre || hasPost) {
+        results.push({ folder: folder, both: (hasPre && hasPost) });
+        if (results.length >= SEARCH.maxResults) stopped = true;
+        return; // ここが案件フォルダ。この下は掘らない
+      }
+      for (var j = 0; j < subs.length; j++) walk(subs[j], depth + 1);
+    }
+
+    walk(root, 0);
+    return { results: results, visited: visited, stopped: stopped };
+  }
+
+  // 一覧に出すラベル。同名の案件フォルダ（最新制作物 など）が並ぶので、
+  // 1つ上の階層まで見せないと区別がつかない。
+  function candidateLabel(c) {
+    var names = [];
+    var f = c.folder;
+    for (var i = 0; i < 3 && f; i++) {
+      names.unshift(decodeName(f));
+      f = f.parent;
+    }
+    var head = names.join(' / ');
+    return c.both ? head : head + '　※[ol前]/[ol後] の片方しかありません';
+  }
+
+  function chooseCandidate(candidates, searchedRoot) {
+    var w = new Window('dialog', '入稿フォルダを選んでください');
+    w.orientation = 'column';
+    w.alignChildren = 'fill';
+    w.preferredSize.width = 620;
+
+    var head = w.add('statictext', undefined,
+      decodeName(searchedRoot) + ' の下に入稿データが ' + candidates.length + ' 件見つかりました。');
+    head.characters = 70;
+
+    var list = w.add('listbox', undefined, [], { multiselect: false });
+    list.preferredSize.height = 280;
+    for (var i = 0; i < candidates.length; i++) {
+      var item = list.add('item', candidateLabel(candidates[i]));
+      item.candidateIndex = i;
+    }
+    list.selection = 0;
+
+    var note = w.add('statictext', undefined, 'old などのフォルダは探索から外しています。');
+    note.characters = 70;
+
+    var row = w.add('group');
+    row.alignment = 'right';
+    row.add('button', undefined, 'キャンセル', { name: 'cancel' });
+    row.add('button', undefined, 'このフォルダをチェック', { name: 'ok' });
+
+    if (w.show() !== 1 || !list.selection) return null;
+    return candidates[list.selection.candidateIndex];
   }
 
   /* ---------- ドキュメントを調べる ---------- */
@@ -303,12 +399,46 @@
     if (!folder) return;
 
     var found = collectAiFiles(folder);
+    var searchNote = null;
+
+    // 直下に無ければ下を探す。上の階層を選ばれるのが普通なので、これが既定の流れ。
     if (found.pre.length === 0 && found.post.length === 0) {
-      alert('このフォルダの直下に [ol前] / [ol後] の .ai が見つかりませんでした。\n\n' +
-        'フォルダ: ' + decodeURI(folder.fsName) + '\n\n' +
-        'サブフォルダ（old など）の中は、同名ファイルが何世代も入っていて\n' +
-        'どれが現物か決められないため、あえて見ていません。');
-      return;
+      var seek = makeProgress();
+      seek.set('入稿データを探しています…', decodeName(folder) + ' の下を確認しています', 0);
+      var search = findCandidateFolders(folder, function (v, r) {
+        seek.set('入稿データを探しています…',
+          'フォルダ ' + v + ' 件を確認 / 見つかった案件 ' + r + ' 件');
+      });
+      seek.close();
+
+      if (search.results.length === 0) {
+        alert('[ol前] / [ol後] の .ai が見つかりませんでした。\n\n' +
+          '探した場所: ' + decodeURI(folder.fsName) + '\n' +
+          '確認したフォルダ: ' + search.visited + ' 件\n\n' +
+          (search.stopped
+            ? '近くのフォルダしか探していません（ドライブは1フォルダ開くのに\n' +
+              '約0.5秒かかるため、深く掘ると終わらない）。\n' +
+              'チェック用ページの「案件を一覧から選ぶ」で場所を調べてから、\n' +
+              'そのフォルダを直接指定してください。\n\n'
+            : '') +
+          'old などのフォルダの中は、同名ファイルが何世代も入っていて\n' +
+          'どれが現物か決められないため、あえて見ていません。');
+        return;
+      }
+
+      var picked;
+      if (search.results.length === 1) {
+        picked = search.results[0];
+      } else {
+        picked = chooseCandidate(search.results, folder);
+        if (!picked) return;
+      }
+      folder = picked.folder;
+      found = collectAiFiles(folder);
+      searchNote = '選んだフォルダの下から「' + decodeName(folder) + '」を見つけてチェックしました。';
+      if (search.stopped) {
+        searchNote += '（フォルダが多かったため探索を途中で打ち切っています。目的の案件が出てこない場合は、もう少し下の階層を選んでください）';
+      }
     }
 
     var result = {
@@ -320,6 +450,8 @@
       warnings: [],
       files: {}
     };
+
+    if (searchNote) result.warnings.push(searchNote);
 
     var pre = pickLatest(found.pre);
     var post = pickLatest(found.post);

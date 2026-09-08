@@ -144,6 +144,47 @@
     return names;
   }
 
+  // 深い階層を人にたどらせないための入口。Drive の検索は1リクエストで
+  // ドライブ全体を引けるので、フォルダを1つずつ開いて掘るより桁違いに速い
+  // （フォルダを開く方式は実測で1件0.5秒。上の階層から掘ると案件に届かない）。
+  async function searchProjects() {
+    const q = encodeURIComponent(
+      "name contains '[ol前]' and trashed = false and " +
+      "mimeType != 'application/vnd.google-apps.folder'");
+    const fields = encodeURIComponent('files(id,name,parents,modifiedTime)');
+    const res = await GAAAT.google.apiFetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}` +
+      '&orderBy=modifiedTime desc&pageSize=100' +
+      '&supportsAllDrives=true&includeItemsFromAllDrives=true');
+    const files = ((await res.json()).files || []).filter(f => /\.ai$/i.test(f.name));
+
+    // 同じフォルダに複数の [ol前] があっても案件は1つ。親フォルダでまとめる。
+    const byParent = new Map();
+    files.forEach(f => {
+      const parent = f.parents && f.parents[0];
+      if (!parent || byParent.has(parent)) return;
+      byParent.set(parent, {
+        parentId: parent,
+        label: f.name.replace('[ol前]', '').replace(/\.ai$/i, ''),
+        modifiedTime: f.modifiedTime
+      });
+    });
+    return Array.from(byParent.values());
+  }
+
+  // Finder / Illustrator のフォルダ選択にそのまま貼れる絶対パスを組み立てる。
+  // マイドライブ直下に GAAAT のショートカットを置いてある前提。
+  async function localPathFor(pathNames) {
+    let email = '';
+    try {
+      const res = await GAAAT.google.apiFetch(
+        'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)');
+      email = ((await res.json()).user || {}).emailAddress || '';
+    } catch (e) { /* 取れなくてもDrive上の経路は出す */ }
+    if (!email) return null;
+    return '~/Library/CloudStorage/GoogleDrive-' + email + '/マイドライブ/' + pathNames.join('/');
+  }
+
   function pickLatestByModified(files) {
     return files.slice().sort((a, b) =>
       new Date(b.modifiedTime) - new Date(a.modifiedTime))[0];
@@ -550,8 +591,9 @@
         els.btnSignIn.disabled = true;
         els.btnLoadSheet.disabled = false;
         els.btnLoadFolder.disabled = false;
+        els.btnFindProjects.disabled = false;
         els.googleStatus.className = 'status';
-        els.googleStatus.textContent = 'ログインしました。入稿フォルダのURLを貼って「フォルダを確認する」を押してください。';
+        els.googleStatus.textContent = 'ログインしました。「案件を一覧から選ぶ」を押すか、フォルダのURLを貼ってください。';
       },
       onSignedOut: () => {
         state.signedIn = false;
@@ -559,6 +601,7 @@
         els.btnSignIn.disabled = false;
         els.btnLoadSheet.disabled = true;
         els.btnLoadFolder.disabled = true;
+        els.btnFindProjects.disabled = true;
       },
       onError: msg => { els.googleStatus.className = 'status err'; els.googleStatus.textContent = msg; }
     });
@@ -568,7 +611,7 @@
     ['drop', 'filePicker', 'loaded', 'sizePreset', 'expW', 'expH', 'tolMm', 'allowRotate',
      'bleedMm', 'tabSheet', 'tabPaste', 'paneSheet', 'panePaste', 'btnSignIn', 'sheetUrl',
      'btnLoadSheet', 'googleStatus', 'sheetStatus', 'pasteArea', 'btnLoadPaste', 'extraPrices',
-     'priceStatus', 'results', 'folderUrl', 'btnLoadFolder', 'folderInfo']
+     'priceStatus', 'results', 'folderUrl', 'btnLoadFolder', 'folderInfo', 'btnFindProjects', 'projectList']
       .forEach(id => { els[id] = document.getElementById(id); });
 
     els.drop.addEventListener('click', () => els.filePicker.click());
@@ -647,13 +690,7 @@
       setPriceSet(buildPriceSet(els.pasteArea.value), '貼り付けたシート');
     });
 
-    els.btnLoadFolder.addEventListener('click', async () => {
-      const id = GAAAT.google.extractDriveFolderId(els.folderUrl.value);
-      if (!id) {
-        els.googleStatus.className = 'status err';
-        els.googleStatus.textContent = '入稿フォルダのURLを入れてください（.../drive/folders/… の形）。';
-        return;
-      }
+    async function openFolder(id) {
       els.googleStatus.className = 'status';
       els.googleStatus.textContent = 'フォルダを読んでいます…';
       els.btnLoadFolder.disabled = true;
@@ -662,7 +699,7 @@
         const path = await drivePath(id);
         report.folderName = path[path.length - 1] || '';
         state.report = report;
-        renderFolderInfo(path, files, ai);
+        renderFolderInfo(path, files, ai, await localPathFor(path));
         els.googleStatus.textContent = 'フォルダを読みました。';
         render();
       } catch (e) {
@@ -671,6 +708,52 @@
       } finally {
         els.btnLoadFolder.disabled = !state.signedIn;
       }
+    }
+
+    els.btnLoadFolder.addEventListener('click', () => {
+      const id = GAAAT.google.extractDriveFolderId(els.folderUrl.value);
+      if (!id) {
+        els.googleStatus.className = 'status err';
+        els.googleStatus.textContent = '入稿フォルダのURLを入れてください（.../drive/folders/… の形）。';
+        return;
+      }
+      openFolder(id);
+    });
+
+    els.btnFindProjects.addEventListener('click', async () => {
+      els.googleStatus.className = 'status';
+      els.googleStatus.textContent = '案件を探しています…';
+      els.btnFindProjects.disabled = true;
+      try {
+        const projects = await searchProjects();
+        els.projectList.textContent = '';
+        if (!projects.length) {
+          els.googleStatus.textContent = '[ol前] の .ai が見つかりませんでした。';
+          return;
+        }
+        const h = document.createElement('h4');
+        h.textContent = '更新が新しい順（' + projects.length + '件）。選ぶとそのフォルダを読みます。';
+        els.projectList.appendChild(h);
+        projects.forEach(pj => {
+          const b = document.createElement('button');
+          b.className = 'proj';
+          b.textContent = pj.label;
+          const small = document.createElement('small');
+          small.textContent = '更新 ' + String(pj.modifiedTime).slice(0, 10);
+          b.appendChild(small);
+          b.addEventListener('click', () => {
+            els.projectList.textContent = '';
+            openFolder(pj.parentId);
+          });
+          els.projectList.appendChild(b);
+        });
+        els.googleStatus.textContent = '案件が ' + projects.length + ' 件見つかりました。';
+      } catch (e) {
+        els.googleStatus.className = 'status err';
+        els.googleStatus.textContent = String(e.message || e);
+      } finally {
+        els.btnFindProjects.disabled = !state.signedIn;
+      }
     });
 
     initGoogle();
@@ -678,7 +761,7 @@
 
   // Illustrator のフォルダ選択でどこを辿ればいいかを出す。
   // ここが分からないのが「面倒くささ」の実体なので、経路をそのまま見せる。
-  function renderFolderInfo(path, files, ai) {
+  function renderFolderInfo(path, files, ai, localPath) {
     const box = els.folderInfo;
     box.textContent = '';
 
@@ -714,10 +797,31 @@
     }
     box.appendChild(ul);
 
+    if (localPath) {
+      const lp = document.createElement('div');
+      lp.className = 'localpath';
+      lp.textContent = localPath;
+      box.appendChild(lp);
+
+      const copy = document.createElement('button');
+      copy.className = 'copy';
+      copy.textContent = 'このパスをコピー';
+      copy.addEventListener('click', () => {
+        navigator.clipboard.writeText(localPath).then(
+          () => {
+            copy.textContent = 'コピーしました';
+            setTimeout(() => { copy.textContent = 'このパスをコピー'; }, 1600);
+          },
+          () => { copy.textContent = 'コピーできませんでした'; });
+      });
+      box.appendChild(copy);
+    }
+
     const note = document.createElement('p');
     note.className = 'note';
-    note.textContent = 'このフォルダの中の ' + files.length + ' 件のうち、直下の .ai だけを見ています。' +
-      'パソコン版 Google ドライブを入れていれば、Finder でも同じ並びで辿れます。';
+    note.textContent = localPath
+      ? 'Illustrator のフォルダ選択で Cmd + Shift + G を押し、このパスを貼って Enter を押すと一気に飛べます。'
+      : 'このフォルダの中の ' + files.length + ' 件のうち、直下の .ai だけを見ています。';
     box.appendChild(note);
   }
 
