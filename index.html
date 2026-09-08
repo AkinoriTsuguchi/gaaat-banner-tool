@@ -495,6 +495,18 @@
     border-radius:10px;
   }
 
+  /* ---- Image upload zones: click/tab into one, then Ctrl/Cmd+V to paste
+     a copied image (e.g. a screenshot) instead of picking a file ---- */
+  .paste-zone{
+    border:1px dashed var(--border);
+    border-radius:8px;
+    padding:10px;
+    outline:none;
+  }
+  .paste-zone:focus{
+    border-color:var(--accent);
+  }
+
   /* ---- ⑥キャラクターラインナップ型: multi-image upload thumbnails ---- */
   .lineup-thumb-grid{
     display:grid;
@@ -892,14 +904,18 @@
 
     <fieldset>
       <legend>素材選定</legend>
-      <input type="file" id="artFile" accept="image/*">
-      <p class="hint">アップロードした画像はリサイズ・トリミング（配置調整）のみ行い、色調補正・加工は一切行いません。</p>
+      <div id="artUploadZone" class="paste-zone" tabindex="0">
+        <input type="file" id="artFile" accept="image/*">
+        <p class="hint">アップロードした画像はリサイズ・トリミング（配置調整）のみ行い、色調補正・加工は一切行いません。この枠内をクリックしてからCtrl+V（Macはcmd+V）でコピーした画像を貼り付けることもできます。</p>
+      </div>
 
       <div id="lineupUploadWrap" style="display:none;">
         <label style="margin-top:16px;">⑥キャラクターラインナップ用素材（複数アップロード・最大6枚）</label>
-        <input type="file" id="lineupFile" accept="image/*" multiple>
-        <div id="lineupThumbGrid" class="lineup-thumb-grid"></div>
-        <p class="hint">複数の透過PNG（キャラクター切り抜き）を選択すると、アップロードした順に左から並びます。各サムネイルの✕で削除できます。全体の拡大縮小・位置調整は「レイアウト微調整」の「素材」欄でまとめて行います（1人ずつの個別調整は非対応）。この欄の画像は⑥のバナー本体にのみ使われ、配色抽出には使われません（配色は上の1枚アップロード欄、または下の色ピッカーで調整してください）。</p>
+        <div id="lineupUploadZone" class="paste-zone" tabindex="0">
+          <input type="file" id="lineupFile" accept="image/*" multiple>
+          <div id="lineupThumbGrid" class="lineup-thumb-grid"></div>
+          <p class="hint">複数の透過PNG（キャラクター切り抜き）を選択すると、アップロードした順に左から並びます。各サムネイルの✕で削除できます。全体の拡大縮小・位置調整は「レイアウト微調整」の「素材」欄でまとめて行います（1人ずつの個別調整は非対応）。この欄の画像は⑥のバナー本体にのみ使われ、配色抽出には使われません（配色は上の1枚アップロード欄、または下の色ピッカーで調整してください）。この枠内をクリックしてからCtrl+V（Macはcmd+V）で1枚ずつ貼り付けることもできます。</p>
+        </div>
       </div>
 
       <div class="drive-section">
@@ -935,18 +951,20 @@
 
       <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border);">
         <label for="kvFile">LPのキービジュアル(KV)から配色を抽出（任意）</label>
-        <input type="file" id="kvFile" accept="image/*">
-        <div id="kvPreviewRow" style="display:none; align-items:center; gap:10px; margin-top:10px;">
-          <div class="lineup-thumb-item" style="width:56px; height:56px; flex-shrink:0;">
-            <img id="kvPreviewImg" alt="KVプレビュー">
-            <button type="button" id="removeKvBtn" class="remove-btn" title="削除">✕</button>
+        <div id="kvUploadZone" class="paste-zone" tabindex="0">
+          <input type="file" id="kvFile" accept="image/*">
+          <div id="kvPreviewRow" style="display:none; align-items:center; gap:10px; margin-top:10px;">
+            <div class="lineup-thumb-item" style="width:56px; height:56px; flex-shrink:0;">
+              <img id="kvPreviewImg" alt="KVプレビュー">
+              <button type="button" id="removeKvBtn" class="remove-btn" title="削除">✕</button>
+            </div>
+            <label style="display:flex; align-items:center; gap:6px; margin:0; font-weight:normal;">
+              <input type="checkbox" id="useKvPaletteToggle">
+              このKVの配色を使う
+            </label>
           </div>
-          <label style="display:flex; align-items:center; gap:6px; margin:0; font-weight:normal;">
-            <input type="checkbox" id="useKvPaletteToggle">
-            このKVの配色を使う
-          </label>
+          <p class="hint">LPのキービジュアルのスクリーンショットをアップロードすると、上の「配色」を素材の代わりにこのKVから自動抽出できます（バナーとLPの見た目のギャップを減らしたい場合に）。この画像自体はバナーには描画されません。チェックを外すか削除すると、通常通り素材から配色を抽出します。この枠内をクリックしてからCtrl+V（Macはcmd+V）でスクリーンショットを直接貼り付けることもできます。</p>
         </div>
-        <p class="hint">LPのキービジュアルのスクリーンショットをアップロードすると、上の「配色」を素材の代わりにこのKVから自動抽出できます（バナーとLPの見た目のギャップを減らしたい場合に）。この画像自体はバナーには描画されません。チェックを外すか削除すると、通常通り素材から配色を抽出します。</p>
       </div>
     </fieldset>
 
@@ -1251,6 +1269,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=93"></script>
+<script src="app.js?v=94"></script>
 </body>
 </html>

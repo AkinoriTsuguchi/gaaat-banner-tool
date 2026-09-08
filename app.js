@@ -528,10 +528,13 @@ const ctx = new Proxy({}, {
 
 const els = {
   artFile: document.getElementById('artFile'),
+  artUploadZone: document.getElementById('artUploadZone'),
   lineupUploadWrap: document.getElementById('lineupUploadWrap'),
   lineupFile: document.getElementById('lineupFile'),
+  lineupUploadZone: document.getElementById('lineupUploadZone'),
   lineupThumbGrid: document.getElementById('lineupThumbGrid'),
   kvFile: document.getElementById('kvFile'),
+  kvUploadZone: document.getElementById('kvUploadZone'),
   kvPreviewRow: document.getElementById('kvPreviewRow'),
   kvPreviewImg: document.getElementById('kvPreviewImg'),
   removeKvBtn: document.getElementById('removeKvBtn'),
@@ -3219,8 +3222,9 @@ function refreshPaletteFromSource() {
   maybeAutoSelectTemplate();
 }
 
-els.artFile.addEventListener('change', e => {
-  const file = e.target.files[0];
+// Shared by the artFile <input> and its paste zone (see enablePasteUpload
+// below) — both just need to hand off a File/Blob here.
+function handleArtFile(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
@@ -3233,12 +3237,13 @@ els.artFile.addEventListener('change', e => {
     img.src = ev.target.result;
   };
   reader.readAsDataURL(file);
-});
+}
+els.artFile.addEventListener('change', e => handleArtFile(e.target.files[0]));
 
 // KV screenshot is palette-only — never composited into the banner, so it
-// gets its own upload input separate from artFile/lineupFile.
-els.kvFile.addEventListener('change', e => {
-  const file = e.target.files[0];
+// gets its own upload input separate from artFile/lineupFile. Shared by the
+// kvFile <input> and its paste zone.
+function handleKvFile(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
@@ -3255,7 +3260,8 @@ els.kvFile.addEventListener('change', e => {
     img.src = ev.target.result;
   };
   reader.readAsDataURL(file);
-});
+}
+els.kvFile.addEventListener('change', e => handleKvFile(e.target.files[0]));
 
 els.useKvPaletteToggle.addEventListener('change', () => {
   state.useKvPalette = els.useKvPaletteToggle.checked;
@@ -3310,13 +3316,15 @@ function applyTemplateUI() {
   els.lineupUploadWrap.style.display = state.template === 'lineup' ? '' : 'none';
 }
 
-els.lineupFile.addEventListener('change', e => {
+// Shared by the lineupFile <input> and its paste zone (see
+// enablePasteUpload below) — both just need to hand off a FileList/array of
+// File/Blob here.
+function handleLineupFiles(fileList) {
   const room = Math.max(0, LINEUP_MAX_IMAGES - state.lineupImages.length);
-  const files = [...e.target.files].slice(0, room);
-  if (e.target.files.length > room) {
+  const files = [...fileList].slice(0, room);
+  if (fileList.length > room) {
     alert(`アップロードできるのは最大${LINEUP_MAX_IMAGES}枚までです。先に不要な画像を削除してから追加してください。`);
   }
-  e.target.value = ''; // allow re-selecting the same file(s) later
   if (!files.length) return;
   // Loads happen in parallel (FileReader/Image are async), but images must
   // land in the row in the order the user selected them, not load-finish
@@ -3342,7 +3350,33 @@ els.lineupFile.addEventListener('change', e => {
     };
     reader.readAsDataURL(file);
   });
+}
+els.lineupFile.addEventListener('change', e => {
+  handleLineupFiles(e.target.files);
+  e.target.value = ''; // allow re-selecting the same file(s) later
 });
+
+// Lets a copied image (e.g. a screenshot still on the clipboard) be pasted
+// directly into an upload zone instead of always requiring a saved file —
+// zoneEl just needs to be a container the user can click/tab into (made
+// focusable here); onFiles receives every image Blob found in the pasted
+// clipboard data (in practice almost always exactly one). The 'paste' event
+// only fires on the currently focused element, so clicking anywhere in the
+// zone (not necessarily the file input itself) before Ctrl/Cmd+V is what
+// makes this unambiguous when 3 separate zones exist on the same page.
+function enablePasteUpload(zoneEl, onFiles) {
+  zoneEl.addEventListener('paste', e => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    const files = [...items].filter(it => it.type.startsWith('image/')).map(it => it.getAsFile()).filter(Boolean);
+    if (!files.length) return;
+    e.preventDefault();
+    onFiles(files);
+  });
+}
+enablePasteUpload(els.artUploadZone, files => handleArtFile(files[0]));
+enablePasteUpload(els.kvUploadZone, files => handleKvFile(files[0]));
+enablePasteUpload(els.lineupUploadZone, files => handleLineupFiles(files));
 
 els.resetColors.addEventListener('click', () => {
   if (!state.artImage) return;
