@@ -1204,25 +1204,32 @@ function drawListHeader(ctx, g, rect, outerMargin, topMargin, c) {
   const maxW = rect.w - outerMargin * 2;
   let y = rect.y + topMargin;
 
-  // 角のカギ括弧マーク（既存リーフレットの意匠）
-  const armLen = g.mm(12);
-  const armThick = g.mm(3.6);
-  ctx.fillStyle = c.text;
-  ctx.fillRect(x, y, armLen, armThick);
-  ctx.fillRect(x, y, armThick, armLen);
-  y += armLen + g.mm(3);
-
   const headingSize = g.mm(14);
   ctx.fillStyle = c.text;
   ctx.font = `900 ${headingSize}px ${FONT_EN}`;
   ctx.fillText(els.listHeading.value || 'LIST', x - g.mm(0.6), y + headingSize);
   y += headingSize + g.mm(6);
 
-  if (!state.qrList) return y + g.mm(2);
-
   // QRを左、その右に「ご購入はこちら」の囲み、囲みの下に注意書き。
+  // 囲みと注意書きは毎回入れる固定要素なので、QR画像の有無に関わらず描く
+  // （QR未アップロードのときだけ、置き場所が分かるよう枠を出す）。
   const qrSize = g.mm(23);
-  drawContained(ctx, state.qrList, x, y, qrSize, qrSize);
+  if (state.qrList) {
+    drawContained(ctx, state.qrList, x, y, qrSize, qrSize);
+  } else {
+    ctx.save();
+    ctx.strokeStyle = withAlpha(c.text, .35);
+    ctx.setLineDash([g.mm(1.5), g.mm(1.5)]);
+    ctx.lineWidth = Math.max(1, g.mm(0.25));
+    ctx.strokeRect(x, y, qrSize, qrSize);
+    ctx.restore();
+    ctx.fillStyle = withAlpha(c.text, .45);
+    ctx.font = `500 ${g.mm(2.4)}px ${FONT_JP}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('QRを', x + qrSize / 2, y + qrSize / 2 - g.mm(0.4));
+    ctx.fillText('アップロード', x + qrSize / 2, y + qrSize / 2 + g.mm(3.2));
+    ctx.textAlign = 'left';
+  }
 
   const boxX = x + qrSize + g.mm(5);
   const boxW = maxW - qrSize - g.mm(5);
