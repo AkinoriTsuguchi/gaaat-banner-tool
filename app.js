@@ -399,6 +399,11 @@ const state = {
   titleNoWrap: true,
   mainCopyNoWrap: true,
   subCopyNoWrap: true,
+  // Shape of the subCopy/mainCopy CTA badge in ③④ ('pill' = fully rounded,
+  // current default; 'square' = lightly rounded corners; 'outline' = no
+  // fill, border only). Project-wide styling choice like titleFont, not
+  // per-language content.
+  subCopyPillShape: 'pill',
   // 'venue' = 来場促進(集客用), 'sale' = オンライン販売用
   bannerPurpose: 'venue',
   googleAccessToken: null,
@@ -596,6 +601,7 @@ const els = {
   titleNoWrapToggle: document.getElementById('titleNoWrapToggle'),
   mainCopyNoWrapToggle: document.getElementById('mainCopyNoWrapToggle'),
   subCopyNoWrapToggle: document.getElementById('subCopyNoWrapToggle'),
+  subCopyPillShapeSelect: document.getElementById('subCopyPillShapeSelect'),
   dateStart: document.getElementById('dateStart'),
   dateEnd: document.getElementById('dateEnd'),
   dateOverride: document.getElementById('dateOverrideField'),
@@ -1684,6 +1690,29 @@ function roundRect(c, x, y, w, h, r) {
   c.closePath();
 }
 
+// Draws the ③④ subCopy/mainCopy CTA badge's background per
+// state.subCopyPillShape ('pill' = fully rounded, current default;
+// 'square' = lightly rounded corners; 'outline' = no fill, border only)
+// and returns the text color that reads well against it. Filled shapes
+// keep using `filledTextHex` (already chosen for contrast against the
+// solid accent fill); 'outline' has no fill behind the text at all, so
+// the text itself carries the accent color instead.
+function drawCtaPillShape(x, y, w, h, accentHex, filledTextHex) {
+  const shape = state.subCopyPillShape;
+  const radius = shape === 'pill' ? h / 2 : 8;
+  if (shape === 'outline') {
+    ctx.strokeStyle = accentHex;
+    ctx.lineWidth = 2;
+    roundRect(ctx, x + 1, y + 1, w - 2, h - 2, radius);
+    ctx.stroke();
+    return accentHex;
+  }
+  ctx.fillStyle = accentHex;
+  roundRect(ctx, x, y, w, h, radius);
+  ctx.fill();
+  return filledTextHex;
+}
+
 // Draws the artwork plain — cover-fit directly into `outer` ({x,y,w,h}),
 // no frame/mat/glass-reflection mockup. Shared by template③ (gallery
 // wall) and template④ (spotlight). Previously wrapped the artwork in a
@@ -1920,11 +1949,9 @@ function renderFrameTemplate() {
     const pillX = W - MARGIN - pillW + ctaAdj.dx;
     const pillY = rowY - pillH / 2 + ctaAdj.dy;
     useLayer('decoration');
-    ctx.fillStyle = rgbToHex(accent);
-    roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
-    ctx.fill();
+    const ctaTextHex = drawCtaPillShape(pillX, pillY, pillW, pillH, rgbToHex(accent), bandTextHex);
     useLayer(ctaSource);
-    ctx.fillStyle = ctaAdj.colorOverride || bandTextHex;
+    ctx.fillStyle = ctaAdj.colorOverride || ctaTextHex;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(ctaFit.text, pillX + padX, pillY + pillH / 2 + 1);
@@ -2093,11 +2120,9 @@ function renderLineupTemplate() {
     const pillX = W - MARGIN - pillW + ctaAdj.dx;
     const pillY = rowY - pillH / 2 + ctaAdj.dy;
     useLayer('decoration');
-    ctx.fillStyle = rgbToHex(accent);
-    roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
-    ctx.fill();
+    const ctaTextHex = drawCtaPillShape(pillX, pillY, pillW, pillH, rgbToHex(accent), bandTextHex);
     useLayer(ctaSource);
-    ctx.fillStyle = ctaAdj.colorOverride || bandTextHex;
+    ctx.fillStyle = ctaAdj.colorOverride || ctaTextHex;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(ctaFit.text, pillX + padX, pillY + pillH / 2 + 1);
@@ -4289,6 +4314,10 @@ els.mainCopyNoWrapToggle.addEventListener('change', () => {
 });
 els.subCopyNoWrapToggle.addEventListener('change', () => {
   state.subCopyNoWrap = els.subCopyNoWrapToggle.checked;
+  render();
+});
+els.subCopyPillShapeSelect.addEventListener('change', () => {
+  state.subCopyPillShape = els.subCopyPillShapeSelect.value;
   render();
 });
 

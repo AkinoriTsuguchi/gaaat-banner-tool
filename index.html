@@ -1069,6 +1069,13 @@
       <input type="text" id="subCopyField" value="全国5都市開催">
       <label class="lang-toggle"><input type="checkbox" id="subCopyNoWrapToggle" checked><span>1行に収める（自動改行しない・収まらない分は自動縮小）</span></label>
 
+      <label for="subCopyPillShapeSelect">サブコピーの枠の形（③⑥のCTAバッジのみ）</label>
+      <select id="subCopyPillShapeSelect">
+        <option value="pill">丸（ピル型・デフォルト）</option>
+        <option value="square">四角</option>
+        <option value="outline">枠のみ（背景塗りなし）</option>
+      </select>
+
       <div class="field-label-row">
         <label>コピーライト（素材上に小さく表示）</label>
         <label class="lang-toggle"><input type="checkbox" id="langToggle_copyright" checked><span>言語別</span></label>
@@ -1310,6 +1317,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=100"></script>
+<script src="app.js?v=101"></script>
 </body>
 </html>
