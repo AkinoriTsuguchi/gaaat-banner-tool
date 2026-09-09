@@ -249,6 +249,40 @@ function pickTextColor(bg) {
   return contrastRatio(bg, black) >= contrastRatio(bg, white) ? black : white;
 }
 
+// Returns `desired` as-is if it already contrasts enough against `bg`,
+// otherwise falls back to pickTextColor(bg) (plain black/white). Used for
+// text that has a "branded" preferred color (e.g. the extracted accent
+// color) but must still be legible over whatever's actually behind it.
+function ensureContrastColor(desired, bg, minRatio = 2.5) {
+  return contrastRatio(desired, bg) >= minRatio ? desired : pickTextColor(bg);
+}
+
+// Averages the pixels of the layers already drawn *so far* (background +
+// artwork + any decoration drawn before this point, e.g. a scrim) within
+// one rect, approximating what will actually be visible behind a piece of
+// HUD text once everything is composited — full-bleed art can be any
+// brightness locally, so a single global extracted color isn't enough to
+// pick a text color that's guaranteed legible at a specific spot.
+function sampleCompositeSoFar(x, y, w, h) {
+  x = Math.round(x); y = Math.round(y);
+  w = Math.min(Math.round(w), CANVAS_SIZE - x);
+  h = Math.min(Math.round(h), CANVAS_SIZE - y);
+  x = Math.max(0, x); y = Math.max(0, y);
+  if (w <= 0 || h <= 0) return state.colors.bg;
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const tctx = tmp.getContext('2d');
+  tctx.fillStyle = rgbToHex(state.colors.bg);
+  tctx.fillRect(0, 0, w, h);
+  ['artwork', 'decoration'].forEach(name => {
+    tctx.drawImage(layers[name].canvas, x, y, w, h, 0, 0, w, h);
+  });
+  const data = tctx.getImageData(0, 0, w, h).data;
+  let r = 0, g = 0, b = 0, count = 0;
+  for (let i = 0; i < data.length; i += 4) { r += data[i]; g += data[i + 1]; b += data[i + 2]; count++; }
+  return count ? { r: Math.round(r / count), g: Math.round(g / count), b: Math.round(b / count) } : state.colors.bg;
+}
+
 function rgbStr(c) { return `rgb(${c.r},${c.g},${c.b})`; }
 function rgbToHex(c) {
   const h = v => v.toString(16).padStart(2, '0');
@@ -3004,11 +3038,13 @@ function renderCyberUiTemplate() {
   // ---- Scattered pseudo system-UI labels ----
   // Template flavor text, not tied to any one input field — stays with
   // the other decorative HUD elements rather than a per-field text layer.
-  // Each one gets its own small translucent backdrop chip (same idea as the
-  // subCopy HUD badge below) rather than relying on low alpha alone for
-  // "subtlety" — full-bleed art can be any brightness (a light, mostly-white
-  // uploaded photo washes out low-alpha text with no backdrop), so the chip
-  // guarantees contrast regardless of what's underneath.
+  // Full-bleed art can be any brightness at any point on the canvas, so a
+  // fixed accent-color fill (previously washed out on light art) isn't
+  // enough — each snippet samples the pixels actually behind IT
+  // specifically (sampleCompositeSoFar) and only falls back off the accent
+  // color to plain black/white if the accent itself wouldn't contrast
+  // enough there (ensureContrastColor), rather than covering the art with
+  // a solid highlight chip.
   const hudTextAdj = adj('hudText');
   if (!hudTextAdj.hidden) {
     const now = new Date();
@@ -3020,21 +3056,18 @@ function renderCyberUiTemplate() {
     ];
     const hudFontPx = Math.round(15 * hudTextAdj.scale / 100);
     ctx.font = `400 ${hudFontPx}px ${mono}`;
-    const chipPadX = 6, chipPadY = 4;
-    ctx.fillStyle = 'rgba(6,10,14,0.5)';
+    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowBlur = 5;
     snippets.forEach(s => {
       const w = ctx.measureText(s.text).width;
-      const bx = (s.align === 'right' ? (s.x + hudTextAdj.dx) - w : s.x + hudTextAdj.dx) - chipPadX;
-      const by = (s.y + hudTextAdj.dy) - hudFontPx * 0.8 - chipPadY;
-      ctx.fillRect(bx, by, w + chipPadX * 2, hudFontPx + chipPadY * 2);
-    });
-    ctx.globalAlpha = 0.9;
-    snippets.forEach(s => {
-      ctx.fillStyle = hudTextAdj.colorOverride || accentHex;
+      const bx = s.align === 'right' ? (s.x + hudTextAdj.dx) - w : s.x + hudTextAdj.dx;
+      const by = (s.y + hudTextAdj.dy) - hudFontPx * 0.8;
+      const bgSample = sampleCompositeSoFar(bx, by, w, hudFontPx * 1.2);
+      ctx.fillStyle = hudTextAdj.colorOverride || rgbToHex(ensureContrastColor(accent, bgSample));
       ctx.textAlign = s.align;
       ctx.fillText(s.text, s.x + hudTextAdj.dx, s.y + hudTextAdj.dy);
     });
-    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
   }
   recordBounds('hudText', MARGIN + 4 + hudTextAdj.dx, MARGIN + 40 + hudTextAdj.dy, W - 2 * MARGIN - 8, W * 0.15);
 
@@ -3086,27 +3119,26 @@ function renderCyberUiTemplate() {
     const lineH = size * 1.1;
     const titleStartTy = kickerY + size * 0.9 + titleAdj.dy;
 
-    // Backdrop panel behind kicker+headline, mirroring the subCopy HUD
-    // badge's own backdrop below — full-bleed art can be any brightness (a
-    // light, mostly-white uploaded photo washes out white text with only a
-    // drop shadow), so this guarantees contrast instead of assuming dark art.
-    useLayer('decoration');
-    const blockLeft = titleLeft + titleAdj.dx - 10;
-    const blockTop = kickerY + titleAdj.dy - 20;
-    const blockW = Math.max(kickerW, titleW) + 20;
-    const blockBottom = titleStartTy + (titleFit.lines.length - 1) * lineH + size * 0.3;
-    ctx.fillStyle = 'rgba(6,10,14,0.5)';
-    roundRect(ctx, blockLeft, blockTop, blockW, blockBottom - blockTop + 10, 6);
-    ctx.fill();
-
+    // Full-bleed art can be any brightness locally, so neither the kicker's
+    // fixed accent color nor the headline's fixed white are guaranteed to
+    // read — each samples the pixels actually behind IT (not a shared
+    // block average, since the kicker and headline can sit over visibly
+    // different parts of the art) and only swaps off its preferred color
+    // if that wouldn't contrast enough there. A drop shadow adds a bit of
+    // edge definition on top, same technique used elsewhere in this file
+    // for text over photos, but isn't relied on alone for contrast.
     useLayer('title');
-    ctx.fillStyle = accentHex;
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur = 8;
+
+    const kickerBg = sampleCompositeSoFar(titleLeft + titleAdj.dx, kickerY + titleAdj.dy - 12, kickerW, 16);
+    ctx.fillStyle = rgbToHex(ensureContrastColor(accent, kickerBg));
     ctx.textAlign = 'left';
     ctx.fillText(kickerLabel, titleLeft + titleAdj.dx, kickerY + titleAdj.dy);
 
+    const titleBg = sampleCompositeSoFar(titleLeft + titleAdj.dx, titleStartTy - size * 0.8, titleW, (titleFit.lines.length - 1) * lineH + size);
     ctx.font = `700 ${size}px ${TITLE_FONT_STACK}`;
-    ctx.fillStyle = titleAdj.colorOverride || white;
-    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.fillStyle = titleAdj.colorOverride || rgbToHex(pickTextColor(titleBg));
     ctx.shadowBlur = 14;
     let ty = titleStartTy;
     titleFit.lines.forEach(ln => { ctx.fillText(ln, titleLeft + titleAdj.dx, ty); ty += lineH; });
