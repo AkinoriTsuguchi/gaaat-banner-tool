@@ -2836,8 +2836,20 @@ function renderVerticalTitleTemplate() {
             // canvas has no such mode, so it's done by hand here). Kanji/
             // kana are drawn upright as normal — only this punctuation set
             // needs it.
+            //
+            // The normal (non-rotated) characters below anchor on their
+            // alphabetic baseline, which sits well below a CJK glyph's own
+            // visual center (full-width glyphs mostly rise above the
+            // baseline). Rotating 90° around that same baseline point would
+            // swap that vertical baseline-to-center offset into a
+            // *horizontal* one on screen — the rotated glyph would land
+            // noticeably off to one side instead of centered under colX.
+            // Switching to a middle baseline and re-centering the anchor on
+            // this glyph's own visual center (~0.38×fontSize above the
+            // baseline other glyphs use) keeps it aligned with its column.
             ctx.save();
-            ctx.translate(colX, y);
+            ctx.textBaseline = 'middle';
+            ctx.translate(colX, y - fontSize * 0.38);
             ctx.rotate(Math.PI / 2);
             ctx.fillText(ch, 0, 0);
             ctx.restore();
