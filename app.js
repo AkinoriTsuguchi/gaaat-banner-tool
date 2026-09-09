@@ -535,6 +535,7 @@ const els = {
   lineupThumbGrid: document.getElementById('lineupThumbGrid'),
   kvFile: document.getElementById('kvFile'),
   kvUploadZone: document.getElementById('kvUploadZone'),
+  kvPaletteSection: document.getElementById('kvPaletteSection'),
   kvPreviewRow: document.getElementById('kvPreviewRow'),
   kvPreviewImg: document.getElementById('kvPreviewImg'),
   removeKvBtn: document.getElementById('removeKvBtn'),
@@ -3254,6 +3255,9 @@ function handleKvFile(file) {
       els.kvPreviewImg.src = img.src;
       els.kvPreviewRow.style.display = 'flex';
       els.useKvPaletteToggle.checked = true;
+      // Stays open once actually in use — collapsed only hides it while
+      // unused, never while it's the active palette source.
+      els.kvPaletteSection.open = true;
       refreshPaletteFromSource();
       render();
     };
@@ -4038,8 +4042,18 @@ canvasWrap.addEventListener('mouseleave', () => {
   });
 });
 
+// dateEnd is the same shared input in both purposes (see
+// applyBannerPurposeUI above) — 集客用 keeps its usual sample default, but
+// オンライン販売用 relabels it "販売終了日（任意）" and should start blank
+// (an ongoing sale usually has no deadline at all). Remembering each
+// purpose's own last value here — rather than just always blanking it on
+// switch to sale — means toggling purpose back and forth doesn't silently
+// discard a sale end date the user already typed in.
+state.dateEndByPurpose = { venue: els.dateEnd.value, sale: '' };
 els.bannerPurposeSelect.addEventListener('change', () => {
+  state.dateEndByPurpose[state.bannerPurpose] = els.dateEnd.value;
   state.bannerPurpose = els.bannerPurposeSelect.value;
+  els.dateEnd.value = state.dateEndByPurpose[state.bannerPurpose];
   applyBannerPurposeUI();
   render();
 });

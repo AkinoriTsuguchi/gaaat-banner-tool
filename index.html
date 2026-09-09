@@ -496,15 +496,52 @@
   }
 
   /* ---- Image upload zones: click/tab into one, then Ctrl/Cmd+V to paste
-     a copied image (e.g. a screenshot) instead of picking a file ---- */
+     a copied image (e.g. a screenshot) instead of picking a file. No
+     visible box by default — a permanent border around ordinary content
+     reads as clutter; the accent ring only needs to show up once the zone
+     actually has focus and pasting would do something. ---- */
   .paste-zone{
-    border:1px dashed var(--border);
-    border-radius:8px;
-    padding:10px;
+    border-radius:6px;
     outline:none;
   }
-  .paste-zone:focus{
-    border-color:var(--accent);
+  .paste-zone:focus-within{
+    box-shadow:0 0 0 2px var(--accent);
+  }
+  .paste-hint{
+    font-size:10px;
+    color:var(--muted);
+    margin-top:4px;
+  }
+
+  /* ---- Optional/secondary sub-sections inside a fieldset, collapsed by
+     default so they don't compete with the primary control above them ---- */
+  details.subsection{
+    margin-top:16px;
+    padding-top:14px;
+    border-top:1px solid var(--border);
+  }
+  details.subsection summary{
+    font-size:12px;
+    color:var(--muted);
+    cursor:pointer;
+    list-style:none;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  details.subsection summary::-webkit-details-marker{display:none;}
+  details.subsection summary::before{
+    content:"▸";
+    font-size:10px;
+  }
+  details.subsection[open] summary::before{
+    content:"▾";
+  }
+  details.subsection summary:hover{
+    color:var(--text);
+  }
+  details.subsection > *:not(summary):first-of-type{
+    margin-top:12px;
   }
 
   /* ---- ⑥キャラクターラインナップ型: multi-image upload thumbnails ---- */
@@ -906,15 +943,17 @@
       <legend>素材選定</legend>
       <div id="artUploadZone" class="paste-zone" tabindex="0">
         <input type="file" id="artFile" accept="image/*">
-        <p class="hint">アップロードした画像はリサイズ・トリミング（配置調整）のみ行い、色調補正・加工は一切行いません。この枠内をクリックしてからCtrl+V（Macはcmd+V）でコピーした画像を貼り付けることもできます。</p>
+        <p class="paste-hint">クリックしてCtrl+V（Macはcmd+V）で画像を貼り付けることもできます</p>
+        <p class="hint">アップロードした画像はリサイズ・トリミング（配置調整）のみ行い、色調補正・加工は一切行いません。</p>
       </div>
 
       <div id="lineupUploadWrap" style="display:none;">
         <label style="margin-top:16px;">⑥キャラクターラインナップ用素材（複数アップロード・最大6枚）</label>
         <div id="lineupUploadZone" class="paste-zone" tabindex="0">
           <input type="file" id="lineupFile" accept="image/*" multiple>
+          <p class="paste-hint">クリックしてCtrl+V（Macはcmd+V）で1枚ずつ貼り付けることもできます</p>
           <div id="lineupThumbGrid" class="lineup-thumb-grid"></div>
-          <p class="hint">複数の透過PNG（キャラクター切り抜き）を選択すると、アップロードした順に左から並びます。各サムネイルの✕で削除できます。全体の拡大縮小・位置調整は「レイアウト微調整」の「素材」欄でまとめて行います（1人ずつの個別調整は非対応）。この欄の画像は⑥のバナー本体にのみ使われ、配色抽出には使われません（配色は上の1枚アップロード欄、または下の色ピッカーで調整してください）。この枠内をクリックしてからCtrl+V（Macはcmd+V）で1枚ずつ貼り付けることもできます。</p>
+          <p class="hint">複数の透過PNG（キャラクター切り抜き）を選択すると、アップロードした順に左から並びます。各サムネイルの✕で削除できます。全体の拡大縮小・位置調整は「レイアウト微調整」の「素材」欄でまとめて行います（1人ずつの個別調整は非対応）。この欄の画像は⑥のバナー本体にのみ使われ、配色抽出には使われません（配色は上の1枚アップロード欄、または下の色ピッカーで調整してください）。</p>
         </div>
       </div>
 
@@ -949,10 +988,12 @@
       <p class="hint">素材から「背景＝メインカラー」「アクセント＝次に目立つ色」を自動抽出し、コントラスト比から文字色（白/黒）を自動選択します。手動で上書きも可能です。</p>
       <button id="resetColorsBtn">素材から再抽出</button>
 
-      <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border);">
-        <label for="kvFile">LPのキービジュアル(KV)から配色を抽出（任意）</label>
+      <details class="subsection" id="kvPaletteSection">
+        <summary>LPのキービジュアル(KV)から配色を抽出（任意）</summary>
+        <p class="hint">バナーとLPの見た目のギャップを減らしたい場合に、素材の代わりにKVのスクリーンショットから配色を抽出できます。この画像自体はバナーには描画されません。</p>
         <div id="kvUploadZone" class="paste-zone" tabindex="0">
           <input type="file" id="kvFile" accept="image/*">
+          <p class="paste-hint">クリックしてCtrl+V（Macはcmd+V）でスクリーンショットを貼り付けることもできます</p>
           <div id="kvPreviewRow" style="display:none; align-items:center; gap:10px; margin-top:10px;">
             <div class="lineup-thumb-item" style="width:56px; height:56px; flex-shrink:0;">
               <img id="kvPreviewImg" alt="KVプレビュー">
@@ -963,9 +1004,9 @@
               このKVの配色を使う
             </label>
           </div>
-          <p class="hint">LPのキービジュアルのスクリーンショットをアップロードすると、上の「配色」を素材の代わりにこのKVから自動抽出できます（バナーとLPの見た目のギャップを減らしたい場合に）。この画像自体はバナーには描画されません。チェックを外すか削除すると、通常通り素材から配色を抽出します。この枠内をクリックしてからCtrl+V（Macはcmd+V）でスクリーンショットを直接貼り付けることもできます。</p>
         </div>
-      </div>
+        <p class="hint">チェックを外すか削除すると、通常通り素材から配色を抽出します。</p>
+      </details>
     </fieldset>
 
     <fieldset>
@@ -1269,6 +1310,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=95"></script>
+<script src="app.js?v=96"></script>
 </body>
 </html>
