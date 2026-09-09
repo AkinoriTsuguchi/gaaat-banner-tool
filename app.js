@@ -2679,6 +2679,17 @@ function renderCutoutTemplate() {
   }
 }
 
+// Characters that read sideways if simply stacked upright in a vertical
+// (tategaki) column — brackets/quotes point the wrong way, a long-vowel
+// mark or dash looks horizontal instead of vertical. Real Japanese vertical
+// typesetting rotates exactly this set 90° clockwise (what CSS
+// text-orientation:mixed does automatically); regular kanji/kana are never
+// rotated. Used by renderVerticalTitleTemplate's CJK column-stacking.
+const VERTICAL_ROTATE_CHARS = new Set([
+  '「', '」', '『', '』', '(', ')', '（', '）', '[', ']', '｛', '｝', '{', '}',
+  '【', '】', '〈', '〉', '《', '》', '〔', '〕', 'ー', '…', '～', '〜'
+]);
+
 // ---------- Template 2: full-bleed art, vertical (tategaki) title ----------
 // Retro / dramatic layout for Japanese-style or classic IP. Artwork fills the
 // canvas with a legibility scrim; the title runs vertically down the right
@@ -2818,7 +2829,21 @@ function renderVerticalTitleTemplate() {
         const colX = titleX + titleAdj.dx - colIdx * (fontSize + colGap);
         let y = titleStartY;
         for (const ch of col) {
-          ctx.fillText(ch, colX, y);
+          if (VERTICAL_ROTATE_CHARS.has(ch)) {
+            // Brackets/quotes read sideways if drawn upright in a vertical
+            // column — real Japanese vertical typesetting rotates these 90°
+            // clockwise (what CSS text-orientation:mixed does automatically;
+            // canvas has no such mode, so it's done by hand here). Kanji/
+            // kana are drawn upright as normal — only this punctuation set
+            // needs it.
+            ctx.save();
+            ctx.translate(colX, y);
+            ctx.rotate(Math.PI / 2);
+            ctx.fillText(ch, 0, 0);
+            ctx.restore();
+          } else {
+            ctx.fillText(ch, colX, y);
+          }
           y += stepPx;
         }
         maxColLen = Math.max(maxColLen, col.length);
