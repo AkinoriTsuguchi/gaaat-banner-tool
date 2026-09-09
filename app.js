@@ -437,37 +437,37 @@ const state = {
     // every category — lets a 版元 recolor any text/pill they drag onto a
     // part of the banner where the automatic color no longer has enough
     // contrast (e.g. onto a locally light area of otherwise-dark artwork).
-    logo: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
-    copyright: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
-    title: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
-    mainCopy: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
-    subCopy: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
-    art: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
-    dates: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
-    extraText: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    logo: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    copyright: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    title: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    mainCopy: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    subCopy: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    art: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    dates: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    extraText: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
     // Only ever populated in sale mode, by the price pill (see
     // drawSaleBadges) — plain venue-name text has never been individually
     // adjustable and still isn't. Named after the 'venue' layer it shares,
     // same precedent as 'logo' sharing the 'decoration' layer.
-    venue: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    venue: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
     // Sale-tag pill (see drawSaleBadges). Kept separate from 'dates' —
     // once end dates became optional-but-showable again in sale mode, the
     // venue/date info line and the sale-tag pill can appear at the same
     // time, so they need independent drag boxes and hide toggles.
-    saleTag: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    saleTag: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
     // The venue/date separator glyph drawn by drawVenueDateLine (shared by
     // frame3/frame4/cutout1/cyberui5/lineup). Previously fixed in position
     // and color with no hide option — dx/dy nudge it off the shared
     // baseline, scale isn't used (it's a single glyph, not worth a second
     // font-size knob), colorOverride/hidden work as usual.
-    separator: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    separator: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
     // cyberui5's 3 faint decorative HUD strings (ERROR CODE / SYSTEM-TT /
     // SCANNING...), moved/resized/recolored/hidden as one group since they
     // have no independent meaning from each other.
-    hudText: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null },
+    hudText: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
     // cyberui5's 4 corner brackets, moved/resized/recolored/hidden as one
     // group (dx/dy shift all 4 corners together, scale adjusts leg length).
-    hudBrackets: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null }
+    hudBrackets: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' }
   }
 };
 
@@ -475,7 +475,7 @@ const state = {
 // key is somehow missing instead of throwing, so a template can always do
 // `const a = adj('title')` without an existence check first.
 function adj(key) {
-  return state.adjustments[key] || { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null };
+  return state.adjustments[key] || { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' };
 }
 
 // Bounding box (in native 1080×1080 canvas space) of each adjustable
@@ -557,13 +557,26 @@ const LAYER_TO_ADJUSTMENT = {
   copyright: 'copyright', artwork: 'art', extraText: 'extraText', saleTag: 'saleTag'
 };
 
+// "重なり順" (stacking order) in the adjustment panel: for the categories
+// above, a 版元 can pull one element to the very front or very back of the
+// whole composite instead of always drawing in the fixed LAYER_ORDER
+// position — e.g. dragging タイトル over 追加テキスト and wanting the title
+// on top. Deliberately just front/back, not a full custom order: anything
+// finer-grained risks breaking a template's own assumptions about what's
+// behind what (e.g. 'decoration' holding scrims meant to sit under text is
+// never reorderable at all). Layers with no mapping (background,
+// decoration, venue, logo's shared layer) always stay at their fixed
+// LAYER_ORDER position.
 function compositeLayers() {
   realCtx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  const back = [], normal = [], front = [];
   LAYER_ORDER.forEach(name => {
     const cat = LAYER_TO_ADJUSTMENT[name];
     if (cat && adj(cat).hidden) return;
-    realCtx.drawImage(layers[name].canvas, 0, 0);
+    const zOrder = cat ? adj(cat).zOrder : 'normal';
+    (zOrder === 'front' ? front : zOrder === 'back' ? back : normal).push(name);
   });
+  [...back, ...normal, ...front].forEach(name => realCtx.drawImage(layers[name].canvas, 0, 0));
 }
 
 const ctx = new Proxy({}, {
@@ -1941,20 +1954,26 @@ function renderFrameTemplate() {
     const ctaAdj = adj(ctaSource);
     const padX = 26, padY = 16;
     const ctaFit = fitFontSizeTruncate(ctaText, W - 2 * MARGIN - 2 * padX, 700, FONT_STACK, 26, 16, 0);
-    const ctaSize = ctaFit.size * ctaAdj.scale / 100;
-    ctx.font = `700 ${ctaSize}px ${FONT_STACK}`;
-    const ctaW = ctx.measureText(ctaFit.text).width;
-    const pillW = ctaW + padX * 2;
-    const pillH = ctaSize + padY * 2;
+    // Badge size is fixed at the natural (unscaled) fit — only the text
+    // itself grows/shrinks with ctaAdj.scale now, so resizing the text no
+    // longer also resizes the badge around it (previously the two were
+    // locked together). A large scale can therefore run the text past the
+    // badge's edges — the accepted tradeoff of decoupling them.
+    ctx.font = `700 ${ctaFit.size}px ${FONT_STACK}`;
+    const baseCtaW = ctx.measureText(ctaFit.text).width;
+    const pillW = baseCtaW + padX * 2;
+    const pillH = ctaFit.size + padY * 2;
     const pillX = W - MARGIN - pillW + ctaAdj.dx;
     const pillY = rowY - pillH / 2 + ctaAdj.dy;
+    const ctaSize = ctaFit.size * ctaAdj.scale / 100;
     useLayer('decoration');
     const ctaTextHex = drawCtaPillShape(pillX, pillY, pillW, pillH, rgbToHex(accent), bandTextHex);
     useLayer(ctaSource);
+    ctx.font = `700 ${ctaSize}px ${FONT_STACK}`;
     ctx.fillStyle = ctaAdj.colorOverride || ctaTextHex;
-    ctx.textAlign = 'left';
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(ctaFit.text, pillX + padX, pillY + pillH / 2 + 1);
+    ctx.fillText(ctaFit.text, pillX + pillW / 2, pillY + pillH / 2 + 1);
     ctx.textBaseline = 'alphabetic';
     recordBounds(ctaSource, pillX, pillY, pillW, pillH);
     ctaPillTop = pillY;
@@ -2112,20 +2131,26 @@ function renderLineupTemplate() {
     const ctaAdj = adj(ctaSource);
     const padX = 26, padY = 16;
     const ctaFit = fitFontSizeTruncate(ctaText, W - 2 * MARGIN - 2 * padX, 700, FONT_STACK, 26, 16, 0);
-    const ctaSize = ctaFit.size * ctaAdj.scale / 100;
-    ctx.font = `700 ${ctaSize}px ${FONT_STACK}`;
-    const ctaW = ctx.measureText(ctaFit.text).width;
-    const pillW = ctaW + padX * 2;
-    const pillH = ctaSize + padY * 2;
+    // Badge size is fixed at the natural (unscaled) fit — only the text
+    // itself grows/shrinks with ctaAdj.scale now, so resizing the text no
+    // longer also resizes the badge around it (previously the two were
+    // locked together). A large scale can therefore run the text past the
+    // badge's edges — the accepted tradeoff of decoupling them.
+    ctx.font = `700 ${ctaFit.size}px ${FONT_STACK}`;
+    const baseCtaW = ctx.measureText(ctaFit.text).width;
+    const pillW = baseCtaW + padX * 2;
+    const pillH = ctaFit.size + padY * 2;
     const pillX = W - MARGIN - pillW + ctaAdj.dx;
     const pillY = rowY - pillH / 2 + ctaAdj.dy;
+    const ctaSize = ctaFit.size * ctaAdj.scale / 100;
     useLayer('decoration');
     const ctaTextHex = drawCtaPillShape(pillX, pillY, pillW, pillH, rgbToHex(accent), bandTextHex);
     useLayer(ctaSource);
+    ctx.font = `700 ${ctaSize}px ${FONT_STACK}`;
     ctx.fillStyle = ctaAdj.colorOverride || ctaTextHex;
-    ctx.textAlign = 'left';
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(ctaFit.text, pillX + padX, pillY + pillH / 2 + 1);
+    ctx.fillText(ctaFit.text, pillX + pillW / 2, pillY + pillH / 2 + 1);
     ctx.textBaseline = 'alphabetic';
     recordBounds(ctaSource, pillX, pillY, pillW, pillH);
     ctaPillTop = pillY;
@@ -3553,6 +3578,7 @@ function syncAdjustmentInputs(cat) {
   const dyEl = document.getElementById(idBase + 'Dy');
   const hiddenEl = document.getElementById(idBase + 'Hidden');
   const colorEl = document.getElementById(idBase + 'Color');
+  const zOrderEl = document.getElementById(idBase + 'ZOrder');
   if (scaleEl) scaleEl.value = a.scale;
   if (dxEl) dxEl.value = a.dx;
   if (dyEl) dyEl.value = a.dy;
@@ -3565,6 +3591,7 @@ function syncAdjustmentInputs(cat) {
     colorEl.value = a.colorOverride || '#ffffff';
     colorEl.classList.toggle('active', !!a.colorOverride);
   }
+  if (zOrderEl) zOrderEl.value = a.zOrder || 'normal';
 }
 
 // ---------- Undo/redo for adjustments ----------
@@ -3720,12 +3747,25 @@ ADJUSTMENT_CATEGORIES.forEach(cat => {
       render();
     });
   }
+  // Only categories that map 1:1 onto their own LAYER_ORDER entry (see
+  // LAYER_TO_ADJUSTMENT) have this markup — compositeLayers() is what
+  // actually reads it. Every other category's lookup here is a harmless
+  // null, same pattern as the color-override elements above.
+  const zOrderEl = document.getElementById(idBase + 'ZOrder');
+  if (zOrderEl) {
+    zOrderEl.addEventListener('change', () => {
+      recordAdjustmentChange();
+      state.adjustments[cat].zOrder = zOrderEl.value;
+      commitAdjustmentUndoGroup();
+      render();
+    });
+  }
 });
 
 els.resetAdjustmentsBtn.addEventListener('click', () => {
   recordAdjustmentChange();
   ADJUSTMENT_CATEGORIES.forEach(cat => {
-    state.adjustments[cat] = { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null };
+    state.adjustments[cat] = { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' };
     syncAdjustmentInputs(cat);
   });
   commitAdjustmentUndoGroup();
@@ -3815,8 +3855,8 @@ els.loadAdjustPresetBtn.addEventListener('click', () => {
   ADJUSTMENT_CATEGORIES.forEach(cat => {
     const saved = preset[cat];
     state.adjustments[cat] = saved
-      ? { scale: saved.scale ?? 100, dx: saved.dx ?? 0, dy: saved.dy ?? 0, hidden: !!saved.hidden, colorOverride: saved.colorOverride ?? null }
-      : { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null };
+      ? { scale: saved.scale ?? 100, dx: saved.dx ?? 0, dy: saved.dy ?? 0, hidden: !!saved.hidden, colorOverride: saved.colorOverride ?? null, zOrder: saved.zOrder ?? 'normal' }
+      : { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' };
     syncAdjustmentInputs(cat);
   });
   commitAdjustmentUndoGroup();
@@ -3857,12 +3897,22 @@ function getCanvasCoords(evt) {
 
 // Later recordBounds() calls come from later draw calls, which paint over
 // earlier ones — so walking keys in reverse insertion order doubles as
-// picking whatever's visually on top at that point.
+// picking whatever's visually on top at that point. A category boosted to
+// 最前面/最背面 (see compositeLayers) is no longer necessarily on top just
+// because it was drawn last, so it needs the same front/normal/back
+// bucketing here — otherwise a click could select whatever's underneath
+// the boosted element instead of the element actually visible on screen.
 function hitTest(x, y) {
   const keys = Object.keys(state.elementBounds);
-  for (let i = keys.length - 1; i >= 0; i--) {
-    const b = state.elementBounds[keys[i]];
-    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return keys[i];
+  const front = [], normal = [], back = [];
+  keys.forEach(k => {
+    const zOrder = adj(k).zOrder;
+    (zOrder === 'front' ? front : zOrder === 'back' ? back : normal).push(k);
+  });
+  const ordered = [...front.reverse(), ...normal.reverse(), ...back.reverse()];
+  for (const key of ordered) {
+    const b = state.elementBounds[key];
+    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return key;
   }
   return null;
 }

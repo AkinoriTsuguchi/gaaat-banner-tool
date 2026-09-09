@@ -358,6 +358,19 @@
     color:var(--text);
     border-color:var(--muted);
   }
+  .adjust-inline-controls{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    flex-shrink:0;
+  }
+  select.adjust-zorder{
+    width:auto;
+    padding:1px 2px;
+    height:18px;
+    font-size:10px;
+    border-radius:4px;
+  }
   .lang-add-row{
     display:flex;
     gap:6px;
@@ -1092,7 +1105,7 @@
 
     <fieldset>
       <legend>レイアウト微調整（版元指定など）</legend>
-      <p class="hint">監修で「ロゴをもう少し大きく」「タイトルを右にずらして」「サブコピーは無し」といった、この案件・このテンプレート固有の指摘が来たときに使います。テンプレートのコード自体は変えず、この案件のセッション内だけで有効な上書きです。「一括生成」にもそのまま反映されるので、都市×言語ぶん手作業でPSDを直す必要はありません。サイズは%（100=元のまま）、位置はpx（＋で右/下）、非表示にチェックするとその要素だけバナーから消えます（レイヤー分け出力には残るので後から復活も可能です）。キャンバス上で要素をドラッグして中央付近まで動かすと、ピンクのガイド線が出て自動的に中央に吸着します（Canvaなどと同じ操作感です）。「素材（トリミング）」以外の各行にある色スウォッチで、その要素だけ色を個別に指定できます（例: ある要素を背景の白い部分に動かしたら自動配色の白文字が見えなくなった、といった場合）。価格バッジ・セールタグバッジはバッジの文字色のみ上書きします（バッジ自体の背景色は変わりません）。↺で自動配色（作品の世界観に合わせた自動選択）に戻せます。</p>
+      <p class="hint">監修で「ロゴをもう少し大きく」「タイトルを右にずらして」「サブコピーは無し」といった、この案件・このテンプレート固有の指摘が来たときに使います。テンプレートのコード自体は変えず、この案件のセッション内だけで有効な上書きです。「一括生成」にもそのまま反映されるので、都市×言語ぶん手作業でPSDを直す必要はありません。サイズは%（100=元のまま）、位置はpx（＋で右/下）、非表示にチェックするとその要素だけバナーから消えます（レイヤー分け出力には残るので後から復活も可能です）。キャンバス上で要素をドラッグして中央付近まで動かすと、ピンクのガイド線が出て自動的に中央に吸着します（Canvaなどと同じ操作感です）。「素材（トリミング）」以外の各行にある色スウォッチで、その要素だけ色を個別に指定できます（例: ある要素を背景の白い部分に動かしたら自動配色の白文字が見えなくなった、といった場合）。価格バッジ・セールタグバッジはバッジの文字色のみ上書きします（バッジ自体の背景色は変わりません）。↺で自動配色（作品の世界観に合わせた自動選択）に戻せます。一部の行にある「重なり順」は、他の要素とドラッグして重なった時にどちらを手前に表示するかを指定できます（通常＝テンプレート本来の順番）。</p>
       <div class="adjust-grid">
         <span></span><span class="adjust-head">サイズ%</span><span class="adjust-head">横位置</span><span class="adjust-head">縦位置</span><span class="adjust-head">非表示</span>
 
@@ -1108,9 +1121,16 @@
         <input type="checkbox" id="adjLogoHidden">
 
         <label for="adjCopyrightScale">コピーライト
-          <span class="adjust-color-override">
-            <input type="color" id="adjCopyrightColor" value="#ffffff" title="色を指定（自動配色を上書き）">
-            <button type="button" id="adjCopyrightColorReset" title="自動配色に戻す">↺</button>
+          <span class="adjust-inline-controls">
+            <select class="adjust-zorder" id="adjCopyrightZOrder" title="重なり順">
+              <option value="normal">通常</option>
+              <option value="front">最前面</option>
+              <option value="back">最背面</option>
+            </select>
+            <span class="adjust-color-override">
+              <input type="color" id="adjCopyrightColor" value="#ffffff" title="色を指定（自動配色を上書き）">
+              <button type="button" id="adjCopyrightColorReset" title="自動配色に戻す">↺</button>
+            </span>
           </span>
         </label>
         <input type="number" id="adjCopyrightScale" value="100" step="5">
@@ -1119,9 +1139,16 @@
         <input type="checkbox" id="adjCopyrightHidden">
 
         <label for="adjTitleScale">タイトル
-          <span class="adjust-color-override">
-            <input type="color" id="adjTitleColor" value="#ffffff" title="色を指定（自動配色を上書き）">
-            <button type="button" id="adjTitleColorReset" title="自動配色に戻す">↺</button>
+          <span class="adjust-inline-controls">
+            <select class="adjust-zorder" id="adjTitleZOrder" title="重なり順">
+              <option value="normal">通常</option>
+              <option value="front">最前面</option>
+              <option value="back">最背面</option>
+            </select>
+            <span class="adjust-color-override">
+              <input type="color" id="adjTitleColor" value="#ffffff" title="色を指定（自動配色を上書き）">
+              <button type="button" id="adjTitleColorReset" title="自動配色に戻す">↺</button>
+            </span>
           </span>
         </label>
         <input type="number" id="adjTitleScale" value="100" step="5">
@@ -1130,9 +1157,16 @@
         <input type="checkbox" id="adjTitleHidden">
 
         <label for="adjMainCopyScale">メインコピー
-          <span class="adjust-color-override">
-            <input type="color" id="adjMainCopyColor" value="#ffffff" title="色を指定（自動配色を上書き）">
-            <button type="button" id="adjMainCopyColorReset" title="自動配色に戻す">↺</button>
+          <span class="adjust-inline-controls">
+            <select class="adjust-zorder" id="adjMainCopyZOrder" title="重なり順">
+              <option value="normal">通常</option>
+              <option value="front">最前面</option>
+              <option value="back">最背面</option>
+            </select>
+            <span class="adjust-color-override">
+              <input type="color" id="adjMainCopyColor" value="#ffffff" title="色を指定（自動配色を上書き）">
+              <button type="button" id="adjMainCopyColorReset" title="自動配色に戻す">↺</button>
+            </span>
           </span>
         </label>
         <input type="number" id="adjMainCopyScale" value="100" step="5">
@@ -1141,9 +1175,16 @@
         <input type="checkbox" id="adjMainCopyHidden">
 
         <label for="adjSubCopyScale">サブコピー
-          <span class="adjust-color-override">
-            <input type="color" id="adjSubCopyColor" value="#ffffff" title="色を指定（自動配色を上書き）">
-            <button type="button" id="adjSubCopyColorReset" title="自動配色に戻す">↺</button>
+          <span class="adjust-inline-controls">
+            <select class="adjust-zorder" id="adjSubCopyZOrder" title="重なり順">
+              <option value="normal">通常</option>
+              <option value="front">最前面</option>
+              <option value="back">最背面</option>
+            </select>
+            <span class="adjust-color-override">
+              <input type="color" id="adjSubCopyColor" value="#ffffff" title="色を指定（自動配色を上書き）">
+              <button type="button" id="adjSubCopyColorReset" title="自動配色に戻す">↺</button>
+            </span>
           </span>
         </label>
         <input type="number" id="adjSubCopyScale" value="100" step="5">
@@ -1152,9 +1193,16 @@
         <input type="checkbox" id="adjSubCopyHidden">
 
         <label for="adjDatesScale">会期情報
-          <span class="adjust-color-override">
-            <input type="color" id="adjDatesColor" value="#ffffff" title="色を指定（自動配色を上書き）">
-            <button type="button" id="adjDatesColorReset" title="自動配色に戻す">↺</button>
+          <span class="adjust-inline-controls">
+            <select class="adjust-zorder" id="adjDatesZOrder" title="重なり順">
+              <option value="normal">通常</option>
+              <option value="front">最前面</option>
+              <option value="back">最背面</option>
+            </select>
+            <span class="adjust-color-override">
+              <input type="color" id="adjDatesColor" value="#ffffff" title="色を指定（自動配色を上書き）">
+              <button type="button" id="adjDatesColorReset" title="自動配色に戻す">↺</button>
+            </span>
           </span>
         </label>
         <input type="number" id="adjDatesScale" value="100" step="5">
@@ -1163,9 +1211,16 @@
         <input type="checkbox" id="adjDatesHidden">
 
         <label for="adjExtraTextScale">追加テキスト
-          <span class="adjust-color-override">
-            <input type="color" id="adjExtraTextColor" value="#ffffff" title="色を指定（自動配色を上書き）">
-            <button type="button" id="adjExtraTextColorReset" title="自動配色に戻す">↺</button>
+          <span class="adjust-inline-controls">
+            <select class="adjust-zorder" id="adjExtraTextZOrder" title="重なり順">
+              <option value="normal">通常</option>
+              <option value="front">最前面</option>
+              <option value="back">最背面</option>
+            </select>
+            <span class="adjust-color-override">
+              <input type="color" id="adjExtraTextColor" value="#ffffff" title="色を指定（自動配色を上書き）">
+              <button type="button" id="adjExtraTextColorReset" title="自動配色に戻す">↺</button>
+            </span>
           </span>
         </label>
         <input type="number" id="adjExtraTextScale" value="100" step="5">
@@ -1173,7 +1228,13 @@
         <input type="number" id="adjExtraTextDy" value="0" step="1">
         <input type="checkbox" id="adjExtraTextHidden">
 
-        <label for="adjArtScale">素材（トリミング）</label>
+        <label for="adjArtScale">素材（トリミング）
+          <select class="adjust-zorder" id="adjArtZOrder" title="重なり順">
+            <option value="normal">通常</option>
+            <option value="front">最前面</option>
+            <option value="back">最背面</option>
+          </select>
+        </label>
         <input type="number" id="adjArtScale" value="100" step="5">
         <input type="number" id="adjArtDx" value="0" step="1">
         <input type="number" id="adjArtDy" value="0" step="1">
@@ -1191,9 +1252,16 @@
         <input type="checkbox" id="adjVenueHidden">
 
         <label for="adjSaleTagScale">セールタグバッジ（オンライン販売用）
-          <span class="adjust-color-override">
-            <input type="color" id="adjSaleTagColor" value="#ffffff" title="色を指定（自動配色を上書き。文字色のみ）">
-            <button type="button" id="adjSaleTagColorReset" title="自動配色に戻す">↺</button>
+          <span class="adjust-inline-controls">
+            <select class="adjust-zorder" id="adjSaleTagZOrder" title="重なり順">
+              <option value="normal">通常</option>
+              <option value="front">最前面</option>
+              <option value="back">最背面</option>
+            </select>
+            <span class="adjust-color-override">
+              <input type="color" id="adjSaleTagColor" value="#ffffff" title="色を指定（自動配色を上書き。文字色のみ）">
+              <button type="button" id="adjSaleTagColorReset" title="自動配色に戻す">↺</button>
+            </span>
           </span>
         </label>
         <input type="number" id="adjSaleTagScale" value="100" step="5">
@@ -1317,6 +1385,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=101"></script>
+<script src="app.js?v=102"></script>
 </body>
 </html>
