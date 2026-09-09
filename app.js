@@ -249,12 +249,24 @@ function pickTextColor(bg) {
   return contrastRatio(bg, black) >= contrastRatio(bg, white) ? black : white;
 }
 
-// Returns `desired` as-is if it already contrasts enough against `bg`,
-// otherwise falls back to pickTextColor(bg) (plain black/white). Used for
-// text that has a "branded" preferred color (e.g. the extracted accent
-// color) but must still be legible over whatever's actually behind it.
-function ensureContrastColor(desired, bg, minRatio = 2.5) {
-  return contrastRatio(desired, bg) >= minRatio ? desired : pickTextColor(bg);
+// Fills `text` with a thin outline in the opposite tone stroked first, the
+// standard "caption over a photo" technique — a flat fill color chosen
+// from an AVERAGE of the area behind it can still land on individual
+// light-vs-dark pixels within a busy/textured photo (e.g. an ornate
+// picture frame's grooves and highlights), and no single flat color reads
+// well against all of that. The outline traces each glyph's own boundary
+// instead, so it stays legible regardless of what's directly behind any
+// one letter. `fill` is a {r,g,b} object; the outline color is whichever
+// of black/white contrasts more against the fill itself (via
+// pickTextColor), not against the background.
+function fillTextRobust(text, x, y, fill, lineWidth) {
+  ctx.lineJoin = 'round';
+  ctx.miterLimit = 2;
+  ctx.lineWidth = lineWidth;
+  ctx.strokeStyle = rgbToHex(pickTextColor(fill));
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = rgbToHex(fill);
+  ctx.fillText(text, x, y);
 }
 
 // Averages the pixels of the layers already drawn *so far* (background +
@@ -2713,22 +2725,37 @@ function renderVerticalTitleTemplate() {
         // capacity instead of measured width, matching the char-count
         // packing this branch already uses for the same reason (see comment
         // above).
-        cols = titleText.split(/[|｜\n]/).map(s => s.trim()).filter(Boolean).slice(0, maxCols).map(s => [...s]);
-        while (fontSize > 40 && cols.some(col => col.length > colCapacity(fontSize))) fontSize -= 4;
+        const rawCols = titleText.split(/[|｜\n]/).map(s => s.trim()).filter(Boolean).slice(0, maxCols).map(s => [...s]);
+        while (fontSize > 40 && rawCols.some(col => col.length > colCapacity(fontSize))) fontSize -= 4;
+        // .scale is applied before deciding how much of each column needs
+        // ellipsis-truncation, not after — otherwise shrinking the size
+        // can't rescue a column that was already truncated at the
+        // pre-scale size (see the else branch's comment below for the
+        // same issue on column COUNT rather than per-column length).
+        fontSize = fontSize * titleAdj.scale / 100;
         const cap = colCapacity(fontSize);
-        cols = cols.map(col => col.length <= cap ? col : col.slice(0, Math.max(1, cap - 1)).concat('…'));
+        cols = rawCols.map(col => col.length <= cap ? col : col.slice(0, Math.max(1, cap - 1)).concat('…'));
       } else {
         while (fontSize > 40 && Math.ceil(titleText.length / colCapacity(fontSize)) > maxCols) fontSize -= 4;
+        // .scale is applied before deciding the column COUNT, not after —
+        // previously it only resized an already-decided layout (picked at
+        // 100%), so shrinking the size could never collapse 2 columns into
+        // 1: reported as "サイズを変更しても改行の調整ができない".
+        fontSize = fontSize * titleAdj.scale / 100;
         const perCol = colCapacity(fontSize);
         let displayChars = [...titleText];
-        if (displayChars.length > perCol * maxCols) {
-          displayChars = displayChars.slice(0, perCol * maxCols - 1).concat('…');
+        const neededCols = Math.max(1, Math.ceil(displayChars.length / perCol));
+        // Still bounded by how much room is actually left of titleX, in
+        // case a large scale needs more columns than fit on the canvas.
+        const maxColsBySpace = Math.max(1, Math.floor((titleX - MARGIN - 20) / (fontSize + colGap)) + 1);
+        const cappedCols = Math.min(neededCols, maxColsBySpace);
+        if (displayChars.length > perCol * cappedCols) {
+          displayChars = displayChars.slice(0, perCol * cappedCols - 1).concat('…');
         }
         cols = [];
         for (let i = 0; i < displayChars.length; i += perCol) cols.push(displayChars.slice(i, i + perCol));
       }
 
-      fontSize = fontSize * titleAdj.scale / 100;
       const stepPx = fontSize * lineStep;
       ctx.font = `700 ${fontSize}px ${TITLE_FONT_STACK}`;
       ctx.textAlign = 'center';
@@ -3038,13 +3065,13 @@ function renderCyberUiTemplate() {
   // ---- Scattered pseudo system-UI labels ----
   // Template flavor text, not tied to any one input field — stays with
   // the other decorative HUD elements rather than a per-field text layer.
-  // Full-bleed art can be any brightness at any point on the canvas, so a
-  // fixed accent-color fill (previously washed out on light art) isn't
-  // enough — each snippet samples the pixels actually behind IT
-  // specifically (sampleCompositeSoFar) and only falls back off the accent
-  // color to plain black/white if the accent itself wouldn't contrast
-  // enough there (ensureContrastColor), rather than covering the art with
-  // a solid highlight chip.
+  // Full-bleed art can be any brightness — and any local texture, like an
+  // ornate picture frame with light highlights and dark grooves — at any
+  // point on the canvas, so each snippet both samples the pixels actually
+  // behind IT (sampleCompositeSoFar → pickTextColor) AND gets a thin
+  // opposite-tone outline (fillTextRobust) so it stays readable even where
+  // the background varies within the small area right behind one line of
+  // text, not just on average.
   const hudTextAdj = adj('hudText');
   if (!hudTextAdj.hidden) {
     const now = new Date();
@@ -3056,18 +3083,19 @@ function renderCyberUiTemplate() {
     ];
     const hudFontPx = Math.round(15 * hudTextAdj.scale / 100);
     ctx.font = `400 ${hudFontPx}px ${mono}`;
-    ctx.shadowColor = 'rgba(0,0,0,0.55)';
-    ctx.shadowBlur = 5;
     snippets.forEach(s => {
       const w = ctx.measureText(s.text).width;
       const bx = s.align === 'right' ? (s.x + hudTextAdj.dx) - w : s.x + hudTextAdj.dx;
       const by = (s.y + hudTextAdj.dy) - hudFontPx * 0.8;
       const bgSample = sampleCompositeSoFar(bx, by, w, hudFontPx * 1.2);
-      ctx.fillStyle = hudTextAdj.colorOverride || rgbToHex(ensureContrastColor(accent, bgSample));
       ctx.textAlign = s.align;
-      ctx.fillText(s.text, s.x + hudTextAdj.dx, s.y + hudTextAdj.dy);
+      if (hudTextAdj.colorOverride) {
+        ctx.fillStyle = hudTextAdj.colorOverride;
+        ctx.fillText(s.text, s.x + hudTextAdj.dx, s.y + hudTextAdj.dy);
+      } else {
+        fillTextRobust(s.text, s.x + hudTextAdj.dx, s.y + hudTextAdj.dy, pickTextColor(bgSample), 3);
+      }
     });
-    ctx.shadowBlur = 0;
   }
   recordBounds('hudText', MARGIN + 4 + hudTextAdj.dx, MARGIN + 40 + hudTextAdj.dy, W - 2 * MARGIN - 8, W * 0.15);
 
@@ -3119,30 +3147,25 @@ function renderCyberUiTemplate() {
     const lineH = size * 1.1;
     const titleStartTy = kickerY + size * 0.9 + titleAdj.dy;
 
-    // Full-bleed art can be any brightness locally, so neither the kicker's
-    // fixed accent color nor the headline's fixed white are guaranteed to
-    // read — each samples the pixels actually behind IT (not a shared
-    // block average, since the kicker and headline can sit over visibly
-    // different parts of the art) and only swaps off its preferred color
-    // if that wouldn't contrast enough there. A drop shadow adds a bit of
-    // edge definition on top, same technique used elsewhere in this file
-    // for text over photos, but isn't relied on alone for contrast.
+    // Full-bleed art can be any brightness AND any local texture (an ornate
+    // picture frame has light highlights and dark grooves within a few px
+    // of each other) — a flat fill color chosen from an area average can
+    // still land on the "wrong" pixels for some individual letters. Each
+    // block samples the pixels behind IT (kicker and headline separately,
+    // since they can sit over visibly different parts of the art) to pick
+    // a base tone, then fillTextRobust adds a thin opposite-tone outline so
+    // legibility doesn't depend on getting the average exactly right.
     useLayer('title');
-    ctx.shadowColor = 'rgba(0,0,0,0.6)';
-    ctx.shadowBlur = 8;
+    ctx.textAlign = 'left';
 
     const kickerBg = sampleCompositeSoFar(titleLeft + titleAdj.dx, kickerY + titleAdj.dy - 12, kickerW, 16);
-    ctx.fillStyle = rgbToHex(ensureContrastColor(accent, kickerBg));
-    ctx.textAlign = 'left';
-    ctx.fillText(kickerLabel, titleLeft + titleAdj.dx, kickerY + titleAdj.dy);
+    fillTextRobust(kickerLabel, titleLeft + titleAdj.dx, kickerY + titleAdj.dy, pickTextColor(kickerBg), 2);
 
     const titleBg = sampleCompositeSoFar(titleLeft + titleAdj.dx, titleStartTy - size * 0.8, titleW, (titleFit.lines.length - 1) * lineH + size);
     ctx.font = `700 ${size}px ${TITLE_FONT_STACK}`;
-    ctx.fillStyle = titleAdj.colorOverride || rgbToHex(pickTextColor(titleBg));
-    ctx.shadowBlur = 14;
+    const titleFillRgb = titleAdj.colorOverride ? hexToRgb(titleAdj.colorOverride) : pickTextColor(titleBg);
     let ty = titleStartTy;
-    titleFit.lines.forEach(ln => { ctx.fillText(ln, titleLeft + titleAdj.dx, ty); ty += lineH; });
-    ctx.shadowBlur = 0;
+    titleFit.lines.forEach(ln => { fillTextRobust(ln, titleLeft + titleAdj.dx, ty, titleFillRgb, 4); ty += lineH; });
     recordBounds('title', titleLeft + titleAdj.dx, titleStartTy - size * 0.8, titleW, titleFit.lines.length * lineH);
   }
 
