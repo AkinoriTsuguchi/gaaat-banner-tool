@@ -936,7 +936,7 @@
       <p class="hint error" id="translationWarningHint" style="display:none;"></p>
       <button type="button" id="autoTranslateBtn" style="display:none;">未翻訳・要更新の項目を自動翻訳</button>
       <p class="hint" id="autoTranslateStatus" style="display:none;"></p>
-      <p class="hint">展示会タイトル・メインコピー・サブコピー・コピーライトは、右上のチェックで言語ごとに切り替えるか（デフォルト）、全言語共通にするかを選べます。切り替えて各言語のテキストを入力してください。会期情報・開催会場名は案件マスタの情報がそのまま使われ、全言語共通です。タブに「！」が付いている言語は、まだ翻訳されていない項目、または原文（日本語）を後から修正したのにその言語の訳文が更新されないまま残っている項目があります。</p>
+      <p class="hint">タイトル・メインコピー・サブコピー・コピーライトは、右上のチェックで言語ごとに切り替えるか全言語共通にするか選べます。タブの「！」は未翻訳、または原文修正後に訳文が未更新の項目がある言語です。</p>
     </fieldset>
 
     <fieldset>
@@ -1018,12 +1018,12 @@
       </div>
       <textarea id="titleField">GINTAMA ART EXHIBITION by GAAAT</textarea>
       <label class="lang-toggle"><input type="checkbox" id="titleNoWrapToggle" checked><span>1行に収める（自動改行しない・収まらない分は自動縮小）</span></label>
-      <p class="hint">案件マスタの企画タイトルはほとんどが1行の短い文言です（例:「頭文字D ART EXHIBITION by GAAAT」）。1行だけ入力すればOKです。案件マスタの貼り付け／スプレッドシート取得を行うと、企画タイトル（日本語）で選択中の言語欄の内容が丸ごと上書きされます（Enterで追加した2行目以降がある場合はそれも含めて置き換わります）。「言語別」がオンの場合、他の言語に切り替えると翻訳前のタイトルがコピーされるので、そこから訳文に書き換えてください。ブランド名などで訳さず統一したい場合はチェックを外してください。長くて自動的に2行に折り返される際、改行位置が意図と違う場合や、意図的に複数行に分けたい場合は、改行したい位置でEnterを押すか、半角の「｜」を入れてください（例:「GAAAT銀魂｜藝術展」→「GAAAT銀魂」「藝術展」の2行）。折り返し自体を止めたい場合は上の「1行に収める」にチェックしてください（文字が小さくなっても1行のまま表示されます）。</p>
+      <p class="hint">1行の短い文言を想定しています（例:「頭文字D ART EXHIBITION by GAAAT」）。改行したい位置でEnterまたは半角「｜」を入れると行を分けられます。折り返さず1行のままにしたい場合は下の「1行に収める」にチェックしてください。</p>
 
       <label id="titleFontPickerLabel" for="titleFontPickerBtn">タイトルフォント</label>
       <button type="button" id="titleFontPickerBtn" aria-haspopup="listbox"><span class="preview"></span><span class="chevron">▾</span></button>
       <div id="titleFontPickerPanel" role="listbox" aria-labelledby="titleFontPickerLabel"></div>
-      <p class="hint">展示会タイトル（および⑤サイバーUI型のキャッチコピー）に使うフォントです。作品の世界観に合わせて選んでください。全テンプレート・全言語・全案件（一括生成含む）で共通のプロジェクト単位の設定です。ボタンを押すと、各フォントの見た目とフォント名（英字／和文）が一覧表示されます。「おすすめ」→「よく使うフォント」（このブラウザでの選択回数順）→「その他」の順に並びます。</p>
+      <p class="hint">展示会タイトルに使うフォントです。作品の世界観に合わせて選んでください。全テンプレート・全言語で共通です。</p>
 
       <label id="dateFieldLabel">会期情報（開始日・終了日）</label>
       <div class="row">
@@ -1310,6 +1310,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=96"></script>
+<script src="app.js?v=97"></script>
 </body>
 </html>

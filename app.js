@@ -3004,6 +3004,11 @@ function renderCyberUiTemplate() {
   // ---- Scattered pseudo system-UI labels ----
   // Template flavor text, not tied to any one input field — stays with
   // the other decorative HUD elements rather than a per-field text layer.
+  // Each one gets its own small translucent backdrop chip (same idea as the
+  // subCopy HUD badge below) rather than relying on low alpha alone for
+  // "subtlety" — full-bleed art can be any brightness (a light, mostly-white
+  // uploaded photo washes out low-alpha text with no backdrop), so the chip
+  // guarantees contrast regardless of what's underneath.
   const hudTextAdj = adj('hudText');
   if (!hudTextAdj.hidden) {
     const now = new Date();
@@ -3013,8 +3018,17 @@ function renderCyberUiTemplate() {
       { text: `SYSTEM-TT / ${stamp}`, x: MARGIN + 4, y: W * 0.48, align: 'left' },
       { text: 'SCANNING...', x: W - MARGIN - 4, y: W * 0.55, align: 'right' }
     ];
-    ctx.font = `400 ${Math.round(15 * hudTextAdj.scale / 100)}px ${mono}`;
-    ctx.globalAlpha = 0.62;
+    const hudFontPx = Math.round(15 * hudTextAdj.scale / 100);
+    ctx.font = `400 ${hudFontPx}px ${mono}`;
+    const chipPadX = 6, chipPadY = 4;
+    ctx.fillStyle = 'rgba(6,10,14,0.5)';
+    snippets.forEach(s => {
+      const w = ctx.measureText(s.text).width;
+      const bx = (s.align === 'right' ? (s.x + hudTextAdj.dx) - w : s.x + hudTextAdj.dx) - chipPadX;
+      const by = (s.y + hudTextAdj.dy) - hudFontPx * 0.8 - chipPadY;
+      ctx.fillRect(bx, by, w + chipPadX * 2, hudFontPx + chipPadY * 2);
+    });
+    ctx.globalAlpha = 0.9;
     snippets.forEach(s => {
       ctx.fillStyle = hudTextAdj.colorOverride || accentHex;
       ctx.textAlign = s.align;
@@ -3041,7 +3055,6 @@ function renderCyberUiTemplate() {
   const badgeX = W - inset - bl - 14 - badgeW + subCopyAdj.dx;
   const badgeY = inset - 6 + subCopyAdj.dy;
 
-  useLayer('title');
   // ---- Title: small "[ EXHIBITION ]" kicker + large bold headline ----
   // Previously this whole thing was a single 18px mono tag — technically
   // "the title was there", but at ad-feed scale it was effectively
@@ -3053,10 +3066,9 @@ function renderCyberUiTemplate() {
   const kickerY = inset + 8;
   const titleAdj = adj('title');
   if (titleText) {
+    const kickerLabel = '[ EXHIBITION ]';
     ctx.font = `700 15px ${mono}`;
-    ctx.fillStyle = accentHex;
-    ctx.textAlign = 'left';
-    ctx.fillText('[ EXHIBITION ]', titleLeft + titleAdj.dx, kickerY + titleAdj.dy);
+    const kickerW = ctx.measureText(kickerLabel).width;
 
     const isCjkLang = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
     // Stay clear of the CTA badge's column for the whole block, not just the
@@ -3070,15 +3082,35 @@ function renderCyberUiTemplate() {
     const titleFit = fitFontSizeWrap(titleText, titleMaxW, 700, TITLE_FONT_STACK, 58, state.titleNoWrap ? 14 : 32, 1, state.titleNoWrap ? 1 : 2, isCjkLang);
     const size = titleFit.size * titleAdj.scale / 100;
     ctx.font = `700 ${size}px ${TITLE_FONT_STACK}`;
+    const titleW = Math.max(1, ...titleFit.lines.map(ln => ctx.measureText(ln).width));
+    const lineH = size * 1.1;
+    const titleStartTy = kickerY + size * 0.9 + titleAdj.dy;
+
+    // Backdrop panel behind kicker+headline, mirroring the subCopy HUD
+    // badge's own backdrop below — full-bleed art can be any brightness (a
+    // light, mostly-white uploaded photo washes out white text with only a
+    // drop shadow), so this guarantees contrast instead of assuming dark art.
+    useLayer('decoration');
+    const blockLeft = titleLeft + titleAdj.dx - 10;
+    const blockTop = kickerY + titleAdj.dy - 20;
+    const blockW = Math.max(kickerW, titleW) + 20;
+    const blockBottom = titleStartTy + (titleFit.lines.length - 1) * lineH + size * 0.3;
+    ctx.fillStyle = 'rgba(6,10,14,0.5)';
+    roundRect(ctx, blockLeft, blockTop, blockW, blockBottom - blockTop + 10, 6);
+    ctx.fill();
+
+    useLayer('title');
+    ctx.fillStyle = accentHex;
+    ctx.textAlign = 'left';
+    ctx.fillText(kickerLabel, titleLeft + titleAdj.dx, kickerY + titleAdj.dy);
+
+    ctx.font = `700 ${size}px ${TITLE_FONT_STACK}`;
     ctx.fillStyle = titleAdj.colorOverride || white;
     ctx.shadowColor = 'rgba(0,0,0,0.6)';
     ctx.shadowBlur = 14;
-    const lineH = size * 1.1;
-    let ty = kickerY + size * 0.9 + titleAdj.dy;
-    const titleStartTy = ty;
+    let ty = titleStartTy;
     titleFit.lines.forEach(ln => { ctx.fillText(ln, titleLeft + titleAdj.dx, ty); ty += lineH; });
     ctx.shadowBlur = 0;
-    const titleW = Math.max(1, ...titleFit.lines.map(ln => ctx.measureText(ln).width));
     recordBounds('title', titleLeft + titleAdj.dx, titleStartTy - size * 0.8, titleW, titleFit.lines.length * lineH);
   }
 
