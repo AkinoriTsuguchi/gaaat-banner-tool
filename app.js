@@ -2557,7 +2557,15 @@ function renderCutoutTemplate() {
 
   let mainLines;
   if (state.mainCopyNoWrap) {
-    const fit = fitFontSizeTruncate(mainCopy, copyMaxW, 800, FONT_STACK, 38, 10, 0);
+    // Floor raised from the generic 10px to comfortably above subCopy's own
+    // floor below — a long, bold mainCopy string previously had to shrink
+    // much further than a short subCopy tag to fit the same column width,
+    // and could end up visibly SMALLER than subCopy despite being the more
+    // prominent element ("メインコピーとサブコピーのフォントサイズが逆転
+    // してて..."). Truncating with an ellipsis at this floor (same
+    // guaranteed-minimum-size approach fitFontSizeWrap already uses for
+    // titles) reads better than silently shrinking past subCopy's size.
+    const fit = fitFontSizeTruncate(mainCopy, copyMaxW, 800, FONT_STACK, 38, 26, 0);
     mainFont = `800 ${fit.size * mainCopyAdj.scale / 100}px ${FONT_STACK}`;
     mainLines = [fit.text];
   } else {
@@ -2569,7 +2577,8 @@ function renderCutoutTemplate() {
   if (!subCopy) {
     subLines = [];
   } else if (state.subCopyNoWrap) {
-    const subFit = fitFontSizeTruncate(subCopy, copyMaxW, 400, FONT_STACK, 24, 10, 0);
+    // Floor kept below mainCopy's (26px) so subCopy can never out-grow it.
+    const subFit = fitFontSizeTruncate(subCopy, copyMaxW, 400, FONT_STACK, 24, 14, 0);
     subFontFinal = `400 ${subFit.size * subCopyAdj.scale / 100}px ${FONT_STACK}`;
     subLines = [subFit.text];
   } else {
@@ -3168,7 +3177,7 @@ function renderCyberUiTemplate() {
       { text: `SYSTEM-TT / ${stamp}`, x: MARGIN + 4, y: W * 0.48, align: 'left' },
       { text: 'SCANNING...', x: W - MARGIN - 4, y: W * 0.55, align: 'right' }
     ];
-    const hudFontPx = Math.round(15 * hudTextAdj.scale / 100);
+    const hudFontPx = Math.round(18 * hudTextAdj.scale / 100);
     ctx.font = `400 ${hudFontPx}px ${mono}`;
     snippets.forEach(s => {
       const w = ctx.measureText(s.text).width;
@@ -3195,7 +3204,7 @@ function renderCyberUiTemplate() {
   // element, not a replacement, so subCopy keeps working here exactly like
   // it does in 集客 mode.
   const ctaLabel = (els.subCopy.value || 'ONLINE SALE').toUpperCase();
-  const ctaFontSize = 17 * subCopyAdj.scale / 100;
+  const ctaFontSize = 20 * subCopyAdj.scale / 100;
   ctx.font = `700 ${ctaFontSize}px ${mono}`;
   const ctaW = ctx.measureText(ctaLabel).width;
   const padX = 14, padY = 9;
@@ -3256,21 +3265,18 @@ function renderCyberUiTemplate() {
     recordBounds('title', titleLeft + titleAdj.dx, titleStartTy - size * 0.8, titleW, titleFit.lines.length * lineH);
   }
 
-  useLayer('decoration');
-  ctx.save();
-  ctx.fillStyle = 'rgba(6,10,14,0.55)';
-  ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
-  ctx.strokeStyle = accentHex;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(badgeX + 0.5, badgeY + 0.5, badgeW - 1, badgeH - 1);
-  ctx.restore();
+  // No backdrop box here any more — same reasoning as the title/HUD text
+  // above (a filled panel read as a stray "highlight" once seen on a real
+  // banner: "サブコピーにハイライトが残ってる"). Outline text against a
+  // sampled background keeps it legible without one.
   useLayer('subCopy');
   ctx.save();
   ctx.font = `700 ${ctaFontSize}px ${mono}`;
-  ctx.fillStyle = subCopyAdj.colorOverride || accentHex;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(ctaLabel, badgeX + padX, badgeY + badgeH / 2 + 1);
+  const badgeBg = sampleCompositeSoFar(badgeX, badgeY, badgeW, badgeH);
+  const ctaFillRgb = subCopyAdj.colorOverride ? hexToRgb(subCopyAdj.colorOverride) : pickTextColor(badgeBg);
+  fillTextRobust(ctaLabel, badgeX + padX, badgeY + badgeH / 2 + 1, ctaFillRgb, 3);
   ctx.textBaseline = 'alphabetic';
   ctx.restore();
   recordBounds('subCopy', badgeX, badgeY, badgeW, badgeH);
