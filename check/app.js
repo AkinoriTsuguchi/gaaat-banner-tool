@@ -892,19 +892,36 @@
     nh.textContent = '次にやること';
     next.appendChild(nh);
 
-    const ol = document.createElement('ol');
+    // 「どこで作業するのか」が書いていないと迷う、という指摘があったので
+    // 場所ごとに区切って出す（ページ → Illustrator → ページ）。
     [
-      '下の「① Illustratorに渡す」を押す（指示ファイルが1つ落ちてきます）',
-      'Illustrator で ファイル → スクリプト → その他のスクリプト... → preflight.jsx',
-      'このフォルダでいいか聞かれるので「はい」。あとは数分待つだけ' +
-        '（.ai は自分で開かなくていい。スクリプトが開いて閉じます）',
-      'このページに戻って「② 結果を取り込む」を押す'
-    ].forEach(t => {
-      const li = document.createElement('li');
-      li.textContent = t;
-      ol.appendChild(li);
+      { where: 'このページで', steps: [
+        '下の「① Illustratorに渡す」を押す',
+        '画面は変わりませんが、ダウンロードフォルダに小さな指示ファイルが落ちます'
+      ] },
+      { where: 'Illustrator で', steps: [
+        'Illustrator を開く（ファイルは何も開かなくていい）',
+        'メニューの ファイル → スクリプト → その他のスクリプト...',
+        'ダウンロードフォルダの preflight.jsx を選んで「開く」',
+        '「' + (path[path.length - 1] || 'このフォルダ') + ' をチェックしますか？」→ はい',
+        '数分待つ（.ai はスクリプトが開いて、保存せず閉じます）'
+      ] },
+      { where: 'このページに戻って', steps: [
+        '「② 結果を取り込む」を押す → 5項目そろった判定が出ます'
+      ] }
+    ].forEach(group => {
+      const wh = document.createElement('p');
+      wh.className = 'where';
+      wh.textContent = group.where;
+      next.appendChild(wh);
+      const ol = document.createElement('ol');
+      group.steps.forEach(t => {
+        const li = document.createElement('li');
+        li.textContent = t;
+        ol.appendChild(li);
+      });
+      next.appendChild(ol);
     });
-    next.appendChild(ol);
 
     const row = document.createElement('div');
     row.className = 'nextbtns';
