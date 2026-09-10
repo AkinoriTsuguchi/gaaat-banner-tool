@@ -266,6 +266,34 @@
   .handle-se{ bottom:-7px; right:-7px; cursor:nwse-resize; }
   .handle-ne{ top:-7px; right:-7px; cursor:nesw-resize; }
   .handle-sw{ bottom:-7px; left:-7px; cursor:nesw-resize; }
+  /* Width-only edge handles — only shown for text categories where dragging
+     sideways changes the wrap column (title/mainCopy/subCopy). Hidden by
+     default; .adjust-highlight.width-resizable (toggled in
+     updateAdjustHighlight) reveals them. No N/S counterpart: a text
+     element's height is derived from its line count, so a vertical handle
+     would have nothing to do. */
+  .resize-handle-edge{
+    display:none;
+    position:absolute;
+    top:50%;
+    width:10px;
+    height:18px;
+    margin-top:-9px;
+    background:#4da3ff;
+    border:2px solid #0b0d10;
+    border-radius:3px;
+    box-sizing:border-box;
+    pointer-events:auto;
+    cursor:ew-resize;
+  }
+  .adjust-highlight.width-resizable .resize-handle-edge{
+    display:block;
+  }
+  .adjust-highlight.dragging .resize-handle-edge{
+    background:#ffd24d;
+  }
+  .handle-e{ right:-6px; }
+  .handle-w{ left:-6px; }
   .hint{
     font-size:11px;
     color:var(--muted);
@@ -1349,6 +1377,8 @@
         <div class="resize-handle handle-ne" data-corner="ne"></div>
         <div class="resize-handle handle-sw" data-corner="sw"></div>
         <div class="resize-handle handle-se" data-corner="se"></div>
+        <div class="resize-handle-edge handle-e" data-edge="e"></div>
+        <div class="resize-handle-edge handle-w" data-edge="w"></div>
       </div>
       <div id="centerGuideV" class="center-guide vertical"></div>
       <div id="centerGuideH" class="center-guide horizontal"></div>
@@ -1391,6 +1421,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=106"></script>
+<script src="app.js?v=107"></script>
 </body>
 </html>

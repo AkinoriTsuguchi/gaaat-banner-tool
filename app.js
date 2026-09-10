@@ -437,37 +437,37 @@ const state = {
     // every category — lets a 版元 recolor any text/pill they drag onto a
     // part of the banner where the automatic color no longer has enough
     // contrast (e.g. onto a locally light area of otherwise-dark artwork).
-    logo: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
-    copyright: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
-    title: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
-    mainCopy: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
-    subCopy: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
-    art: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
-    dates: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
-    extraText: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    logo: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    copyright: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    title: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    mainCopy: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    subCopy: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    art: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    dates: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    extraText: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
     // Only ever populated in sale mode, by the price pill (see
     // drawSaleBadges) — plain venue-name text has never been individually
     // adjustable and still isn't. Named after the 'venue' layer it shares,
     // same precedent as 'logo' sharing the 'decoration' layer.
-    venue: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    venue: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
     // Sale-tag pill (see drawSaleBadges). Kept separate from 'dates' —
     // once end dates became optional-but-showable again in sale mode, the
     // venue/date info line and the sale-tag pill can appear at the same
     // time, so they need independent drag boxes and hide toggles.
-    saleTag: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    saleTag: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
     // The venue/date separator glyph drawn by drawVenueDateLine (shared by
     // frame3/frame4/cutout1/cyberui5/lineup). Previously fixed in position
     // and color with no hide option — dx/dy nudge it off the shared
     // baseline, scale isn't used (it's a single glyph, not worth a second
     // font-size knob), colorOverride/hidden work as usual.
-    separator: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    separator: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
     // cyberui5's 3 faint decorative HUD strings (ERROR CODE / SYSTEM-TT /
     // SCANNING...), moved/resized/recolored/hidden as one group since they
     // have no independent meaning from each other.
-    hudText: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
+    hudText: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' },
     // cyberui5's 4 corner brackets, moved/resized/recolored/hidden as one
     // group (dx/dy shift all 4 corners together, scale adjusts leg length).
-    hudBrackets: { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' }
+    hudBrackets: { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' }
   }
 };
 
@@ -475,7 +475,18 @@ const state = {
 // key is somehow missing instead of throwing, so a template can always do
 // `const a = adj('title')` without an existence check first.
 function adj(key) {
-  return state.adjustments[key] || { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' };
+  return state.adjustments[key] || { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' };
+}
+
+// Applies a category's widthScale (E/W edge-handle resize) to a maxWidth
+// value used for text fit/wrap. widthScale is clamped to [40,100] wherever
+// it's set (see the edge-handle drag handler below), so this only ever
+// narrows the box relative to the template's own designed width — never
+// widens past it — which keeps a widened text block from ever overlapping
+// neighboring elements (art, badges) that the template's fixed layout
+// already assumes it won't reach.
+function widthScaled(baseWidth, cat) {
+  return baseWidth * (adj(cat).widthScale ?? 100) / 100;
 }
 
 // Bounding box (in native 1080×1080 canvas space) of each adjustable
@@ -1437,7 +1448,7 @@ function renderCurrentLayout() {
     // headline rather than flat body text, matching the more graphic
     // treatment the other templates already have.
     const isCjkTitle = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
-    const titleFit = fitFontSizeWrap(titleText.toUpperCase(), titleMaxW, 700, TITLE_FONT_STACK, 136, state.titleNoWrap ? 14 : 64, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
+    const titleFit = fitFontSizeWrap(titleText.toUpperCase(), widthScaled(titleMaxW, 'title'), 700, TITLE_FONT_STACK, 136, state.titleNoWrap ? 14 : 64, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
     const size = titleFit.size * titleAdj.scale / 100;
     const titleLineH = size * 1.05;
     cursorY += size * 0.78;
@@ -1654,24 +1665,24 @@ function renderCurrentLayout() {
     // afterward (like title does) rather than feeding it into the fit
     // search — otherwise dragging bigger just gets shrunk straight back
     // down to whatever already fits, and the drag has no visible effect.
-    const fit = fitFontSizeTruncateOrManual(mainCopy, bandTextMaxW, 800, FONT_STACK, 42, 10, 0);
+    const fit = fitFontSizeTruncateOrManual(mainCopy, widthScaled(bandTextMaxW, 'mainCopy'), 800, FONT_STACK, 42, 10, 0);
     mainFont = `800 ${fit.size * mainCopyAdj.scale / 100}px ${FONT_STACK}`;
     mainLines = fit.lines;
   } else {
     ctx.font = mainFont;
-    mainLines = wrapTextManual(mainCopy, bandTextMaxW, mainFont, false);
+    mainLines = wrapTextManual(mainCopy, widthScaled(bandTextMaxW, 'mainCopy'), mainFont, false);
   }
   let subFontFinal = subFont;
   let subLines;
   if (!subCopy) {
     subLines = [];
   } else if (state.subCopyNoWrap) {
-    const subFit = fitFontSizeTruncateOrManual(subCopy, bandTextMaxW, 400, FONT_STACK, 28, 10, 0);
+    const subFit = fitFontSizeTruncateOrManual(subCopy, widthScaled(bandTextMaxW, 'subCopy'), 400, FONT_STACK, 28, 10, 0);
     subFontFinal = `400 ${subFit.size * subCopyAdj.scale / 100}px ${FONT_STACK}`;
     subLines = subFit.lines;
   } else {
     ctx.font = subFont;
-    subLines = wrapTextManual(subCopy, bandTextMaxW, subFont, false);
+    subLines = wrapTextManual(subCopy, widthScaled(bandTextMaxW, 'subCopy'), subFont, false);
   }
 
   const lineH1 = 48, lineH2 = 36, gapBetween = 8;
@@ -1942,7 +1953,7 @@ function renderFrameTemplate() {
   const titleAdj = adj('title');
   if (headline) {
     const isCjkTitle = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
-    const headlineFit = fitFontSizeWrap(headline, W - 2 * 140, 700, TITLE_FONT_STACK, 64, state.titleNoWrap ? 14 : 40, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
+    const headlineFit = fitFontSizeWrap(headline, widthScaled(W - 2 * 140, 'title'), 700, TITLE_FONT_STACK, 64, state.titleNoWrap ? 14 : 40, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
     const size = headlineFit.size * titleAdj.scale / 100;
     const lineH = size * 1.05;
     const yStart = MARGIN + 60;
@@ -2134,7 +2145,7 @@ function renderLineupTemplate() {
   const titleAdj = adj('title');
   if (headline) {
     const isCjkTitle = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
-    const headlineFit = fitFontSizeWrap(headline, W - 2 * 140, 700, TITLE_FONT_STACK, 64, state.titleNoWrap ? 14 : 40, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
+    const headlineFit = fitFontSizeWrap(headline, widthScaled(W - 2 * 140, 'title'), 700, TITLE_FONT_STACK, 64, state.titleNoWrap ? 14 : 40, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
     const size = headlineFit.size * titleAdj.scale / 100;
     const lineH = size * 1.05;
     const yStart = MARGIN + 60;
@@ -2327,7 +2338,7 @@ function renderSpotlightFrameTemplate() {
   const titleAdj = adj('title');
   if (titleText) {
     const isCjkTitle = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
-    const titleFit = fitFontSizeWrap(titleText, W - 2 * 120, 700, TITLE_FONT_STACK, 116, state.titleNoWrap ? 14 : 56, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
+    const titleFit = fitFontSizeWrap(titleText, widthScaled(W - 2 * 120, 'title'), 700, TITLE_FONT_STACK, 116, state.titleNoWrap ? 14 : 56, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
     const size = titleFit.size * titleAdj.scale / 100;
     const lineH = size * 1.05;
     const yStart = cursorY + size * 0.78;
@@ -2361,11 +2372,11 @@ function renderSpotlightFrameTemplate() {
     let font = `500 ${Math.round(30 * mainCopyAdj.scale / 100)}px ${FONT_STACK}`;
     let subLines;
     if (state.mainCopyNoWrap) {
-      const fit = fitFontSizeTruncateOrManual(subCopyText, W - 2 * 150, 500, FONT_STACK, 30, 10, 0);
+      const fit = fitFontSizeTruncateOrManual(subCopyText, widthScaled(W - 2 * 150, 'mainCopy'), 500, FONT_STACK, 30, 10, 0);
       font = `500 ${fit.size * mainCopyAdj.scale / 100}px ${FONT_STACK}`;
       subLines = fit.lines.slice(0, 2);
     } else {
-      subLines = wrapTextManual(subCopyText, W - 2 * 150, font, isCjkLang).slice(0, 2);
+      subLines = wrapTextManual(subCopyText, widthScaled(W - 2 * 150, 'mainCopy'), font, isCjkLang).slice(0, 2);
     }
     ctx.font = font;
     ctx.textAlign = 'center';
@@ -2560,7 +2571,8 @@ function renderCutoutTemplate() {
     // for a manually-dialed-in, visually-checked override, unlike the
     // automatic per-language sizing.
     const isCjkTitle = ['ja', 'zh-Hans', 'zh-Hant'].includes(state.currentLang);
-    const headlineFit = fitFontSizeWrap(headline, titleMaxW, 700, TITLE_FONT_STACK, 108, state.titleNoWrap ? 14 : 48, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
+    const titleMaxWScaled = widthScaled(titleMaxW, 'title');
+    const headlineFit = fitFontSizeWrap(headline, titleMaxWScaled, 700, TITLE_FONT_STACK, 108, state.titleNoWrap ? 14 : 48, 1, state.titleNoWrap ? 1 : 2, isCjkTitle);
     const size = headlineFit.size * titleAdj.scale / 100;
     const lineH = size * 1.05;
     ctx.font = `700 ${size}px ${TITLE_FONT_STACK}`;
@@ -2569,7 +2581,7 @@ function renderCutoutTemplate() {
     // so an override just wins outright.
     let titleFill = titleAdj.colorOverride;
     if (!titleFill) {
-      const grad = ctx.createLinearGradient(textLeft, 0, textLeft + titleMaxW, 0);
+      const grad = ctx.createLinearGradient(textLeft, 0, textLeft + titleMaxWScaled, 0);
       grad.addColorStop(0, accentHex);
       grad.addColorStop(1, rgbToHex(lightenRgb(accent, 0.35)));
       titleFill = grad;
@@ -2631,12 +2643,12 @@ function renderCutoutTemplate() {
     // してて..."). Truncating with an ellipsis at this floor (same
     // guaranteed-minimum-size approach fitFontSizeWrap already uses for
     // titles) reads better than silently shrinking past subCopy's size.
-    const fit = fitFontSizeTruncateOrManual(mainCopy, copyMaxW, 800, FONT_STACK, 38, 26, 0);
+    const fit = fitFontSizeTruncateOrManual(mainCopy, widthScaled(copyMaxW, 'mainCopy'), 800, FONT_STACK, 38, 26, 0);
     mainFont = `800 ${fit.size * mainCopyAdj.scale / 100}px ${FONT_STACK}`;
     mainLines = fit.lines;
   } else {
     ctx.font = mainFont;
-    mainLines = wrapTextManual(mainCopy, copyMaxW, mainFont, isCjkLang);
+    mainLines = wrapTextManual(mainCopy, widthScaled(copyMaxW, 'mainCopy'), mainFont, isCjkLang);
   }
   let subFontFinal = subFont;
   let subLines;
@@ -2644,12 +2656,12 @@ function renderCutoutTemplate() {
     subLines = [];
   } else if (state.subCopyNoWrap) {
     // Floor kept below mainCopy's (26px) so subCopy can never out-grow it.
-    const subFit = fitFontSizeTruncateOrManual(subCopy, copyMaxW, 400, FONT_STACK, 24, 14, 0);
+    const subFit = fitFontSizeTruncateOrManual(subCopy, widthScaled(copyMaxW, 'subCopy'), 400, FONT_STACK, 24, 14, 0);
     subFontFinal = `400 ${subFit.size * subCopyAdj.scale / 100}px ${FONT_STACK}`;
     subLines = subFit.lines;
   } else {
     ctx.font = subFont;
-    subLines = wrapTextManual(subCopy, copyMaxW, subFont, isCjkLang);
+    subLines = wrapTextManual(subCopy, widthScaled(copyMaxW, 'subCopy'), subFont, isCjkLang);
   }
 
   const lineH1 = 46, lineH2 = 32, gapBetween = 10;
@@ -2945,7 +2957,7 @@ function renderVerticalTitleTemplate() {
       // rather than shrinking to a single crushed line, so a long
       // translated title still reads at a reasonably large size instead of
       // running into the band underneath it.
-      const titleFit = fitFontSizeWrap(titleText.toUpperCase(), W - 2 * MARGIN - 140, 700, TITLE_FONT_STACK, 84, state.titleNoWrap ? 14 : 40, 2, state.titleNoWrap ? 1 : 2, false);
+      const titleFit = fitFontSizeWrap(titleText.toUpperCase(), widthScaled(W - 2 * MARGIN - 140, 'title'), 700, TITLE_FONT_STACK, 84, state.titleNoWrap ? 14 : 40, 2, state.titleNoWrap ? 1 : 2, false);
       const size = titleFit.size * titleAdj.scale / 100;
       const colGap = 14;
       const originX = titleX + titleAdj.dx, originY = MARGIN + 60 + titleAdj.dy;
@@ -3302,7 +3314,7 @@ function renderCyberUiTemplate() {
     // dropped any text past line 2 with no truncation mark if the title was
     // long enough to need a 3rd line.
     const titleMaxW = Math.max(240, badgeX - titleLeft - 24);
-    const titleFit = fitFontSizeWrap(titleText, titleMaxW, 700, TITLE_FONT_STACK, 58, state.titleNoWrap ? 14 : 32, 1, state.titleNoWrap ? 1 : 2, isCjkLang);
+    const titleFit = fitFontSizeWrap(titleText, widthScaled(titleMaxW, 'title'), 700, TITLE_FONT_STACK, 58, state.titleNoWrap ? 14 : 32, 1, state.titleNoWrap ? 1 : 2, isCjkLang);
     const size = titleFit.size * titleAdj.scale / 100;
     ctx.font = `700 ${size}px ${TITLE_FONT_STACK}`;
     const titleW = Math.max(1, ...titleFit.lines.map(ln => ctx.measureText(ln).width));
@@ -3356,12 +3368,12 @@ function renderCyberUiTemplate() {
     let font = `700 ${Math.round(46 * mainCopyAdj.scale / 100)}px ${TITLE_FONT_STACK}`;
     let copyLines;
     if (state.mainCopyNoWrap) {
-      const fit = fitFontSizeTruncateOrManual(mainCopy, maxW, 700, TITLE_FONT_STACK, 46, 10, 0);
+      const fit = fitFontSizeTruncateOrManual(mainCopy, widthScaled(maxW, 'mainCopy'), 700, TITLE_FONT_STACK, 46, 10, 0);
       font = `700 ${fit.size * mainCopyAdj.scale / 100}px ${TITLE_FONT_STACK}`;
       copyLines = fit.lines;
     } else {
       ctx.font = font;
-      copyLines = wrapTextManual(mainCopy, maxW, font, false);
+      copyLines = wrapTextManual(mainCopy, widthScaled(maxW, 'mainCopy'), font, false);
     }
     const lineH = 56;
     let ty = W - MARGIN - bl - 96 - (copyLines.length - 1) * lineH;
@@ -3872,7 +3884,7 @@ ADJUSTMENT_CATEGORIES.forEach(cat => {
 els.resetAdjustmentsBtn.addEventListener('click', () => {
   recordAdjustmentChange();
   ADJUSTMENT_CATEGORIES.forEach(cat => {
-    state.adjustments[cat] = { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' };
+    state.adjustments[cat] = { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' };
     syncAdjustmentInputs(cat);
   });
   commitAdjustmentUndoGroup();
@@ -3962,8 +3974,8 @@ els.loadAdjustPresetBtn.addEventListener('click', () => {
   ADJUSTMENT_CATEGORIES.forEach(cat => {
     const saved = preset[cat];
     state.adjustments[cat] = saved
-      ? { scale: saved.scale ?? 100, dx: saved.dx ?? 0, dy: saved.dy ?? 0, hidden: !!saved.hidden, colorOverride: saved.colorOverride ?? null, zOrder: saved.zOrder ?? 'normal' }
-      : { scale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' };
+      ? { scale: saved.scale ?? 100, widthScale: saved.widthScale ?? 100, dx: saved.dx ?? 0, dy: saved.dy ?? 0, hidden: !!saved.hidden, colorOverride: saved.colorOverride ?? null, zOrder: saved.zOrder ?? 'normal' }
+      : { scale: 100, widthScale: 100, dx: 0, dy: 0, hidden: false, colorOverride: null, zOrder: 'normal' };
     syncAdjustmentInputs(cat);
   });
   commitAdjustmentUndoGroup();
@@ -4041,6 +4053,7 @@ function updateAdjustHighlight(key) {
   els.adjustHighlight.style.width = Math.max(0, b.w * sx) + 'px';
   els.adjustHighlight.style.height = Math.max(0, b.h * sy) + 'px';
   els.adjustHighlightLabel.textContent = ADJUSTMENT_LABELS[key] || key;
+  els.adjustHighlight.classList.toggle('width-resizable', WIDTH_RESIZABLE_CATEGORIES.has(key));
 }
 
 // Canva/Figma-style snap guides: while dragging (moving, not resizing) an
@@ -4189,6 +4202,23 @@ const dragState = { key: null, startX: 0, startY: 0, startDx: 0, startDy: 0 };
 // mid-drag.
 const resizeState = { key: null, corner: null, centerX: 0, centerY: 0, startDist: 0, startScale: 100 };
 
+// Categories whose E/W edge handle (see .resize-handle-edge below) resizes
+// the text's wrap column instead of the font size. Limited to the 3
+// standalone prose blocks — title/mainCopy/subCopy — that always own their
+// own column width; dates/venue share a line with other content and
+// copyright/extraText don't auto-wrap at all, so a width handle there
+// wouldn't have a coherent effect to drive.
+const WIDTH_RESIZABLE_CATEGORIES = new Set(['title', 'mainCopy', 'subCopy']);
+// E/W-only resize: dragging an edge handle changes state.adjustments[key]
+// .widthScale (clamped to [40,100] — see widthScaled() in the template
+// code), narrowing or restoring the text's wrap column. Distance is
+// measured on the X axis only from the box's own center, mirroring the
+// corner-handle's distance-ratio approach but in 1D. Capped at 100 (never
+// widens past the template's own designed column) so a widened text block
+// can never grow into a neighboring element the fixed layout assumes it
+// won't reach.
+const edgeResizeState = { key: null, centerX: 0, startDistX: 0, startWidthScale: 100 };
+
 canvas.addEventListener('mousedown', (evt) => {
   const { x, y } = getCanvasCoords(evt);
   const key = hitTest(x, y);
@@ -4203,7 +4233,7 @@ canvas.addEventListener('mousedown', (evt) => {
 });
 
 canvas.addEventListener('mousemove', (evt) => {
-  if (dragState.key || resizeState.key) return; // tracked by the window-level listener below
+  if (dragState.key || resizeState.key || edgeResizeState.key) return; // tracked by the window-level listener below
   const { x, y } = getCanvasCoords(evt);
   const key = hitTest(x, y);
   canvas.classList.toggle('adjust-hoverable', !!key);
@@ -4232,6 +4262,25 @@ document.querySelectorAll('#adjustHighlight .resize-handle').forEach(handle => {
   });
 });
 
+// Same idea as the corner handles above, but E/W-only and driving
+// widthScale instead of scale (see WIDTH_RESIZABLE_CATEGORIES).
+document.querySelectorAll('#adjustHighlight .resize-handle-edge').forEach(handle => {
+  handle.addEventListener('mousedown', (evt) => {
+    const key = currentAdjustKey;
+    if (!key || !WIDTH_RESIZABLE_CATEGORIES.has(key)) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    const b = state.elementBounds[key];
+    edgeResizeState.key = key;
+    edgeResizeState.centerX = b.x + b.w / 2;
+    const edge = handle.dataset.edge;
+    const edgeX = edge === 'e' ? b.x + b.w : b.x;
+    edgeResizeState.startDistX = Math.abs(edgeX - edgeResizeState.centerX) || 1;
+    edgeResizeState.startWidthScale = adj(key).widthScale ?? 100;
+    els.adjustHighlight.classList.add('dragging');
+  });
+});
+
 // Bound to window rather than the canvas so a drag/resize keeps tracking the
 // mouse even once the cursor leaves the canvas element — the canvas is
 // usually displayed well under its native 1080px size, so a canvas-only
@@ -4239,6 +4288,17 @@ document.querySelectorAll('#adjustHighlight .resize-handle').forEach(handle => {
 // roughly the canvas's on-screen size, well short of the full range the
 // numeric fields already allow.
 window.addEventListener('mousemove', (evt) => {
+  if (edgeResizeState.key) {
+    const { x } = getCanvasCoords(evt);
+    const distX = Math.abs(x - edgeResizeState.centerX);
+    recordAdjustmentChange();
+    const widthScale = Math.max(40, Math.min(100, Math.round(edgeResizeState.startWidthScale * (distX / edgeResizeState.startDistX))));
+    state.adjustments[edgeResizeState.key].widthScale = widthScale;
+    render();
+    syncAdjustmentInputs(edgeResizeState.key);
+    updateAdjustHighlight(edgeResizeState.key);
+    return;
+  }
   if (resizeState.key) {
     const { x, y } = getCanvasCoords(evt);
     const dist = Math.hypot(x - resizeState.centerX, y - resizeState.centerY);
@@ -4277,6 +4337,11 @@ window.addEventListener('mouseup', () => {
     resizeState.key = null;
     hideCenterGuides();
   }
+  if (edgeResizeState.key) {
+    commitAdjustmentUndoGroup();
+    els.adjustHighlight.classList.remove('dragging');
+    edgeResizeState.key = null;
+  }
 });
 
 // Bound to #canvasWrap (not the canvas element) so moving from the canvas
@@ -4284,7 +4349,7 @@ window.addEventListener('mouseup', () => {
 // canvas — doesn't itself count as "left the interactive area" and hide the
 // highlight/handles out from under the cursor.
 canvasWrap.addEventListener('mouseleave', () => {
-  if (!dragState.key && !resizeState.key) {
+  if (!dragState.key && !resizeState.key && !edgeResizeState.key) {
     els.adjustHighlight.style.display = 'none';
     canvas.classList.remove('adjust-hoverable');
   }
