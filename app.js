@@ -5909,13 +5909,16 @@ async function selectDriveFile(file) {
 }
 
 // ---------- Drive multi-select batch export (画像を差し替えながら一括書き出し) ----------
-// Reuses the exact same copy/adjustments currently configured — only
-// state.artImage (and the palette + template derived from it) changes per
-// file. Whether the template ALSO follows each image's own colors, or stays
-// locked to whatever's currently selected, is controlled by the same
-// existing "素材の配色からレイアウトを自動選択" checkbox everyone already
-// uses for single-image uploads — refreshPaletteFromSource() respects it as-is,
-// so batch export doesn't need (or impose) its own separate rule.
+// Reuses the exact same template/copy/adjustments currently configured —
+// only state.artImage and the palette derived from it change per file. The
+// template is ALWAYS kept locked here, regardless of the "素材の配色から
+// レイアウトを自動選択" checkbox — an earlier version deferred to that
+// checkbox, but real usage showed that's the wrong default for a batch
+// export: the whole point is producing the same composition across many
+// images with just the color swapped ("02の構図で色だけ違うバージョンを
+// 一括で書き出してほしい／テンプレートを勝手に変えるとかやめて"), so
+// letting the template drift per image silently — even opt-in — surprised
+// more than it helped. Colors still auto-extract per image as before.
 async function runDriveMultiExport() {
   const files = getSelectedDriveFiles();
   if (!files.length) return;
@@ -5938,7 +5941,12 @@ async function runDriveMultiExport() {
       els.driveMultiExportStatus.textContent = `${file.name} を書き出し中… (${done}/${files.length})`;
       const img = await fetchDriveFileAsImage(file);
       state.artImage = img;
-      refreshPaletteFromSource();
+      const source = (state.useKvPalette && state.kvImage) ? state.kvImage : img;
+      const palette = extractPalette(source);
+      state.colors.bg = palette.bg;
+      state.colors.accent = palette.accent;
+      state.colors.accentRaw = palette.accentRaw;
+      syncColorPickers();
       render();
       await new Promise(r => requestAnimationFrame(r));
 
