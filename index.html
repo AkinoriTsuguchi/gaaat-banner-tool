@@ -1050,7 +1050,7 @@
         <p class="hint" id="driveStatus" style="display:none;"></p>
         <div id="driveFileGrid" class="drive-file-grid" style="display:none;"></div>
         <div id="driveMultiExportRow" class="drive-multi-export-row" style="display:none;">
-          <p class="hint">画像左上のチェックで複数選択すると、同じテンプレート・コピーのまま画像だけ差し替えて一括書き出しできます（自動レイアウト選択は書き出し中オフになります）。</p>
+          <p class="hint">画像左上のチェックで複数選択すると、同じコピーのまま画像だけ差し替えて一括書き出しできます。配色は画像ごとに自動抽出されます。テンプレートも画像ごとに切り替えたい場合は上の「素材の配色からレイアウトを自動選択」をONに、今のテンプレートのまま揃えたい場合はOFFにしてから実行してください。</p>
           <button type="button" id="driveMultiExportBtn">選択した画像で一括書き出し（<span id="driveMultiExportCount">0</span>件）</button>
           <p class="hint" id="driveMultiExportStatus" style="display:none;"></p>
         </div>
@@ -1462,6 +1462,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=109"></script>
+<script src="app.js?v=110"></script>
 </body>
 </html>

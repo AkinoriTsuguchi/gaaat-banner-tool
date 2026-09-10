@@ -5908,21 +5908,21 @@ async function selectDriveFile(file) {
   }
 }
 
-// ---------- Drive multi-select batch export (同じ構図・コピーのまま画像だけ差し替え) ----------
-// Reuses the exact same template/copy/adjustments currently configured —
-// only state.artImage (and the palette derived from it) changes per file.
-// Auto-template-select is force-disabled for the duration so every export
-// in the batch keeps the same layout ("同じ訴求、構図でバナーを作りたい"),
-// even if a differently-toned image would otherwise have picked a
-// different template.
+// ---------- Drive multi-select batch export (画像を差し替えながら一括書き出し) ----------
+// Reuses the exact same copy/adjustments currently configured — only
+// state.artImage (and the palette + template derived from it) changes per
+// file. Whether the template ALSO follows each image's own colors, or stays
+// locked to whatever's currently selected, is controlled by the same
+// existing "素材の配色からレイアウトを自動選択" checkbox everyone already
+// uses for single-image uploads — refreshPaletteFromSource() respects it as-is,
+// so batch export doesn't need (or impose) its own separate rule.
 async function runDriveMultiExport() {
   const files = getSelectedDriveFiles();
   if (!files.length) return;
 
   const prevArtImage = state.artImage;
   const prevBg = state.colors.bg, prevAccent = state.colors.accent, prevAccentRaw = state.colors.accentRaw;
-  const prevAutoTemplate = els.autoTemplateCheckbox.checked;
-  els.autoTemplateCheckbox.checked = false;
+  const prevTemplate = state.template;
 
   els.driveMultiExportBtn.disabled = true;
   els.driveMultiExportStatus.style.display = '';
@@ -5938,12 +5938,7 @@ async function runDriveMultiExport() {
       els.driveMultiExportStatus.textContent = `${file.name} を書き出し中… (${done}/${files.length})`;
       const img = await fetchDriveFileAsImage(file);
       state.artImage = img;
-      const source = (state.useKvPalette && state.kvImage) ? state.kvImage : img;
-      const palette = extractPalette(source);
-      state.colors.bg = palette.bg;
-      state.colors.accent = palette.accent;
-      state.colors.accentRaw = palette.accentRaw;
-      syncColorPickers();
+      refreshPaletteFromSource();
       render();
       await new Promise(r => requestAnimationFrame(r));
 
@@ -5991,7 +5986,9 @@ async function runDriveMultiExport() {
     state.colors.accent = prevAccent;
     state.colors.accentRaw = prevAccentRaw;
     syncColorPickers();
-    els.autoTemplateCheckbox.checked = prevAutoTemplate;
+    state.template = prevTemplate;
+    els.templateSelect.value = prevTemplate;
+    applyTemplateUI();
     render();
     els.driveMultiExportBtn.disabled = false;
   }
