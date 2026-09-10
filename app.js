@@ -479,12 +479,12 @@ function adj(key) {
 }
 
 // Applies a category's widthScale (E/W edge-handle resize) to a maxWidth
-// value used for text fit/wrap. widthScale is clamped to [40,100] wherever
-// it's set (see the edge-handle drag handler below), so this only ever
-// narrows the box relative to the template's own designed width — never
-// widens past it — which keeps a widened text block from ever overlapping
-// neighboring elements (art, badges) that the template's fixed layout
-// already assumes it won't reach.
+// value used for text fit/wrap. widthScale is clamped to [30,220] wherever
+// it's set (see the edge-handle drag handler below) — the same
+// manually-dialed-in, visually-checked trade-off as the corner handle's
+// .scale already makes (no upper safety cap either), rather than a hard
+// stop at 100% that would block someone from widening a truncating box just
+// because a neighboring element's position isn't tracked here.
 function widthScaled(baseWidth, cat) {
   return baseWidth * (adj(cat).widthScale ?? 100) / 100;
 }
@@ -4210,13 +4210,10 @@ const resizeState = { key: null, corner: null, centerX: 0, centerY: 0, startDist
 // wouldn't have a coherent effect to drive.
 const WIDTH_RESIZABLE_CATEGORIES = new Set(['title', 'mainCopy', 'subCopy']);
 // E/W-only resize: dragging an edge handle changes state.adjustments[key]
-// .widthScale (clamped to [40,100] — see widthScaled() in the template
-// code), narrowing or restoring the text's wrap column. Distance is
-// measured on the X axis only from the box's own center, mirroring the
-// corner-handle's distance-ratio approach but in 1D. Capped at 100 (never
-// widens past the template's own designed column) so a widened text block
-// can never grow into a neighboring element the fixed layout assumes it
-// won't reach.
+// .widthScale (clamped to [30,220] — see widthScaled() in the template
+// code), narrowing or widening the text's wrap column. Distance is measured
+// on the X axis only from the box's own center, mirroring the corner
+// handle's distance-ratio approach but in 1D.
 const edgeResizeState = { key: null, centerX: 0, startDistX: 0, startWidthScale: 100 };
 
 canvas.addEventListener('mousedown', (evt) => {
@@ -4292,7 +4289,7 @@ window.addEventListener('mousemove', (evt) => {
     const { x } = getCanvasCoords(evt);
     const distX = Math.abs(x - edgeResizeState.centerX);
     recordAdjustmentChange();
-    const widthScale = Math.max(40, Math.min(100, Math.round(edgeResizeState.startWidthScale * (distX / edgeResizeState.startDistX))));
+    const widthScale = Math.max(30, Math.min(220, Math.round(edgeResizeState.startWidthScale * (distX / edgeResizeState.startDistX))));
     state.adjustments[edgeResizeState.key].widthScale = widthScale;
     render();
     syncAdjustmentInputs(edgeResizeState.key);
