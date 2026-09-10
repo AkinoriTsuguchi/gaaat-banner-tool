@@ -182,7 +182,17 @@ function extractPalette(img) {
     const hsl = rgbToHsl(bg.r, bg.g, bg.b);
     accent = hslToRgbObj((hsl.h + 0.5) % 1, Math.max(0.55, hsl.s), 0.5);
   } else {
-    pool.forEach(c => { c.score = c.count * Math.pow(c.s, 1.4); });
+    // Exponent used to be 1.4 (super-linear in saturation), which — even
+    // after the hue-grouping above — still let a small but fully-saturated
+    // accessory (a flat-colored ribbon) outscore a much larger but only
+    // moderately-saturated region (soft-shaded pastel hair): a real report
+    // where a character's lavender hair lost to a small shared yellow bow
+    // despite covering 3x+ the pixels, purely because 1.0^1.4 vs 0.38^1.4
+    // amplifies the saturation gap far past what the area gap could make up
+    // for. Linear (exponent 1) still favors more colorful candidates over
+    // washed-out ones, just without that extra squared-ish penalty on
+    // anything short of fully saturated.
+    pool.forEach(c => { c.score = c.count * c.s; });
     pool.sort((a, b) => b.score - a.score);
     accent = pool[0];
   }
