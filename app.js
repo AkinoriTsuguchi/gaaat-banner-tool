@@ -144,14 +144,45 @@ function extractPalette(img) {
   // as the "accent" just because they are frequent).
   const vivid = remaining.filter(c => c.hsl.s > 0.28 && c.hsl.l > 0.15 && c.hsl.l < 0.9);
 
+  // A softly-shaded large area (hair, a costume panel with highlights/
+  // shadows) lands in several adjacent-but-distinct STEP=16 buckets, so no
+  // single bucket's count reflects its true total size — while a small flat
+  // accent (a ribbon, a badge) concentrates entirely into one bucket. Left
+  // ungrouped, that small flat patch can out-score a much larger shaded area
+  // on raw bucket count alone ("黄色っぽくないキャラにも黄色が適用され
+  // てたりする" — a plain saturated yellow trim beating a shaded, larger
+  // hair color). Merging same-hue buckets before scoring fixes this: sum
+  // their counts so the score reflects the color family's real total area.
+  const HUE_BINS = 15; // ~24° per bin — wide enough to merge shading of one
+                        // hue, narrow enough not to blend genuinely different
+                        // colors (e.g. a yellow ribbon vs. blue hair).
+  const hueGroups = new Map();
+  vivid.forEach(c => {
+    const bin = Math.round(c.hsl.h * HUE_BINS) % HUE_BINS;
+    let grp = hueGroups.get(bin);
+    if (!grp) { grp = { count: 0, r: 0, g: 0, b: 0, maxS: 0 }; hueGroups.set(bin, grp); }
+    grp.count += c.count;
+    grp.r += c.r * c.count; grp.g += c.g * c.count; grp.b += c.b * c.count;
+    grp.maxS = Math.max(grp.maxS, c.hsl.s);
+  });
+  // `s` here is each candidate's own saturation reading — a hue group's
+  // strongest shade for grouped candidates, or the bucket's own for the
+  // ungrouped fallback below — so the same scoring formula works for either.
+  const groups = Array.from(hueGroups.values()).map(grp => ({
+    r: Math.round(grp.r / grp.count), g: Math.round(grp.g / grp.count), b: Math.round(grp.b / grp.count),
+    count: grp.count, s: grp.maxS
+  }));
+
   let accent;
-  const pool = vivid.length > 0 ? vivid : remaining;
+  // Groups exist whenever `vivid` had anything to group; otherwise fall back
+  // to the raw (ungrouped) candidates, same as before this fix.
+  const pool = groups.length > 0 ? groups : remaining.map(c => ({ ...c, s: c.hsl.s }));
   if (pool.length === 0) {
     // fallback: derive an accent by shifting hue/lightness of bg
     const hsl = rgbToHsl(bg.r, bg.g, bg.b);
     accent = hslToRgbObj((hsl.h + 0.5) % 1, Math.max(0.55, hsl.s), 0.5);
   } else {
-    pool.forEach(c => { c.score = c.count * Math.pow(c.hsl.s, 1.4); });
+    pool.forEach(c => { c.score = c.count * Math.pow(c.s, 1.4); });
     pool.sort((a, b) => b.score - a.score);
     accent = pool[0];
   }
