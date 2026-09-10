@@ -768,7 +768,10 @@ function applyBannerPurposeUI() {
 // drawSaleBadges() below rather than folding into this muted text line,
 // so it reads as prominently as it does on GAAAT's actual EC banners.
 function buildInfoLineParts() {
-  const dateOverrideText = els.dateOverride.value.trim();
+  // 会場名・会期情報はどちらも drawVenueDateLine で1行を共有する前提の要素
+  // なので単一行のまま — 他の欄向けにテキストエリア化したことで打てるように
+  // なった手動改行は、ここでは半角スペースに落として吸収する。
+  const dateOverrideText = els.dateOverride.value.trim().replace(/[|｜\n]/g, ' ');
   const dateEndLabel = formatBannerDate(els.dateEnd.value, state.currentLang);
   let dateRange;
   if (state.bannerPurpose === 'sale') {
@@ -780,7 +783,8 @@ function buildInfoLineParts() {
     dateRange = dateOverrideText || [dateStartLabel, dateEndLabel].filter(Boolean).join(' – ');
   }
   const parts = [];
-  if (state.bannerPurpose !== 'sale' && els.venue.value.trim()) parts.push({ text: els.venue.value.trim(), layer: 'venue' });
+  const venueText = els.venue.value.trim().replace(/[|｜\n]/g, ' ');
+  if (state.bannerPurpose !== 'sale' && venueText) parts.push({ text: venueText, layer: 'venue' });
   if (dateRange) parts.push({ text: dateRange, layer: 'dates' });
   return parts;
 }
@@ -931,11 +935,13 @@ function saleCtaFallback() {
 // copy line) across both banner purposes instead of double-duty as a CTA.
 // Both this and price are fully optional — neither auto-fills, so nothing
 // shows unless someone actually typed it in.
+// Both feed a pill-shaped badge (drawPill/drawSaleBadges), single-line by
+// design — flatten a manual break the textarea now accepts into a space.
 function saleTagText() {
-  return els.saleTag.value.trim();
+  return els.saleTag.value.trim().replace(/[|｜\n]/g, ' ');
 }
 function priceTagText() {
-  return state.bannerPurpose === 'sale' ? els.priceField.value.trim() : '';
+  return state.bannerPurpose === 'sale' ? els.priceField.value.trim().replace(/[|｜\n]/g, ' ') : '';
 }
 
 // Draws one rounded pill (filled background + single-line text) at `x,y`
@@ -1107,6 +1113,58 @@ function fitFontSizeTruncate(text, maxWidth, weight, family, startSize, minSize,
     displayText = displayText.replace(/\s+$/, '') + '…';
   }
   return { size, text: displayText };
+}
+
+// Same job as fitFontSizeTruncate (shrink one line to fit, then truncate
+// with an ellipsis as a last resort) but respects an explicit Enter/｜ as a
+// manual line break first — the same convention fitFontSizeWrap already
+// uses for titles ("Enterで改行" — this just extends it to every other
+// NoWrap-mode field). With no manual break this is identical to
+// fitFontSizeTruncate; with one, it hands off to fitFontSizeWrap with
+// exactly enough lines for every manual segment, so pressing Enter never
+// silently drops a line. Always returns {size, lines} (fitFontSizeTruncate
+// returns {size, text}) so callers use `.lines` either way.
+function fitFontSizeTruncateOrManual(text, maxWidth, weight, family, startSize, minSize, spacing = 0) {
+  if (/[|｜\n]/.test(text)) {
+    const segCount = Math.max(1, text.split(/[|｜\n]/).map(s => s.trim()).filter(Boolean).length);
+    return fitFontSizeWrap(text, maxWidth, weight, family, startSize, minSize, spacing, segCount, false);
+  }
+  const fit = fitFontSizeTruncate(text, maxWidth, weight, family, startSize, minSize, spacing);
+  return { size: fit.size, lines: [fit.text] };
+}
+
+// Same job as wrapText/wrapTextChars (auto-wrap at a fixed size) but treats
+// an explicit Enter/｜ as a forced paragraph break first, so typing Enter
+// always lands a break exactly there instead of being swallowed into the
+// greedy width-based wrap like any other whitespace. `byChar` picks
+// wrapTextChars (CJK) vs wrapText (word-based) for each paragraph.
+function wrapTextManual(text, maxWidth, font, byChar) {
+  const wrapOne = byChar ? wrapTextChars : wrapText;
+  if (/[|｜\n]/.test(text)) {
+    const paras = text.split(/[|｜\n]/).map(s => s.trim()).filter(Boolean);
+    return paras.flatMap(p => wrapOne(p, maxWidth, font));
+  }
+  return wrapOne(text, maxWidth, font);
+}
+
+// Draws `text` split into lines by Enter/｜ (same manual-break convention),
+// anchored at (x, y) as the LAST line's baseline — matching how every
+// existing single-line corner-text call site (copyright, extraText) already
+// positions itself relative to a fixed corner — so an added line grows
+// upward/away from that corner instead of shifting the anchor itself.
+// ctx.font/fillStyle/textAlign/globalAlpha must already be set by the
+// caller, same as a plain fillText call. Returns {width, height} (widest
+// line, total line count × lineH) for recordBounds.
+function fillTextManualLines(text, x, y, lineH) {
+  const lines = text.split(/[|｜\n]/).map(s => s.trim()).filter(Boolean);
+  if (!lines.length) return { width: 0, height: 0 };
+  let width = 0;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const ly = y - (lines.length - 1 - i) * lineH;
+    ctx.fillText(lines[i], x, ly);
+    width = Math.max(width, ctx.measureText(lines[i]).width);
+  }
+  return { width, height: lines.length * lineH };
 }
 
 // Splits text into units (words, or characters for CJK) and greedily packs
@@ -1459,7 +1517,11 @@ function renderCurrentLayout() {
   // Venue — not shown at all in sale mode (see applyBannerPurposeUI)
   useLayer('venue');
   const venueAdj = adj('venue');
-  const venueText = state.bannerPurpose === 'sale' ? '' : els.venue.value;
+  // 会場名 shares one line with 会期情報 via drawVenueDateLine elsewhere, so
+  // it stays single-line by design — flatten a manual break the textarea
+  // now accepts (typed for OTHER fields' sake) into a space rather than
+  // feeding fitFontSizeTruncate a literal newline it doesn't understand.
+  const venueText = state.bannerPurpose === 'sale' ? '' : els.venue.value.replace(/[|｜\n]/g, ' ');
   // Fit at the BASE size first, then apply .scale as a plain multiplier
   // afterward (like dates/mainCopy do) — feeding scale into the fit
   // search's startSize instead just gets shrunk straight back down to
@@ -1488,7 +1550,7 @@ function renderCurrentLayout() {
     // floating in a gap left by the empty venue line above it.
     useLayer('dates');
     const datesAdj = adj('dates');
-    const saleDateText = els.dateOverride.value.trim() || formatSaleDeadline(formatBannerDate(els.dateEnd.value, state.currentLang), state.currentLang);
+    const saleDateText = els.dateOverride.value.trim().replace(/[|｜\n]/g, ' ') || formatSaleDeadline(formatBannerDate(els.dateEnd.value, state.currentLang), state.currentLang);
     if (saleDateText) {
       // Fit at the BASE size first, then apply .scale as a plain
       // multiplier afterward (like title does) — feeding scale into the
@@ -1513,7 +1575,7 @@ function renderCurrentLayout() {
   // two-line start/end display with a single line, so the slash connector —
   // meaningless once the text is arbitrary — is skipped in that case.
   const datesAdj = adj('dates');
-  const dateOverrideText = els.dateOverride.value.trim();
+  const dateOverrideText = els.dateOverride.value.trim().replace(/[|｜\n]/g, ' ');
   const dateStartLabel = formatBannerDate(els.dateStart.value, state.currentLang);
   const dateEndLabel = formatBannerDate(els.dateEnd.value, state.currentLang);
   const dateSize = 58 * datesAdj.scale / 100;
@@ -1592,24 +1654,24 @@ function renderCurrentLayout() {
     // afterward (like title does) rather than feeding it into the fit
     // search — otherwise dragging bigger just gets shrunk straight back
     // down to whatever already fits, and the drag has no visible effect.
-    const fit = fitFontSizeTruncate(mainCopy, bandTextMaxW, 800, FONT_STACK, 42, 10, 0);
+    const fit = fitFontSizeTruncateOrManual(mainCopy, bandTextMaxW, 800, FONT_STACK, 42, 10, 0);
     mainFont = `800 ${fit.size * mainCopyAdj.scale / 100}px ${FONT_STACK}`;
-    mainLines = [fit.text];
+    mainLines = fit.lines;
   } else {
     ctx.font = mainFont;
-    mainLines = wrapText(mainCopy, bandTextMaxW, mainFont);
+    mainLines = wrapTextManual(mainCopy, bandTextMaxW, mainFont, false);
   }
   let subFontFinal = subFont;
   let subLines;
   if (!subCopy) {
     subLines = [];
   } else if (state.subCopyNoWrap) {
-    const subFit = fitFontSizeTruncate(subCopy, bandTextMaxW, 400, FONT_STACK, 28, 10, 0);
+    const subFit = fitFontSizeTruncateOrManual(subCopy, bandTextMaxW, 400, FONT_STACK, 28, 10, 0);
     subFontFinal = `400 ${subFit.size * subCopyAdj.scale / 100}px ${FONT_STACK}`;
-    subLines = [subFit.text];
+    subLines = subFit.lines;
   } else {
     ctx.font = subFont;
-    subLines = wrapText(subCopy, bandTextMaxW, subFont);
+    subLines = wrapTextManual(subCopy, bandTextMaxW, subFont, false);
   }
 
   const lineH1 = 48, lineH2 = 36, gapBetween = 8;
@@ -1645,9 +1707,8 @@ function renderCurrentLayout() {
     ctx.fillStyle = crAdj.colorOverride || bandTextHex;
     ctx.globalAlpha = 0.7;
     const crX = W - MARGIN + crAdj.dx, crY = W - 24 + crAdj.dy;
-    const crW = ctx.measureText(els.copyright.value).width;
-    ctx.fillText(els.copyright.value, crX, crY);
-    recordBounds('copyright', crX - crW, crY - crSize * 0.8, crW, crSize);
+    const { width: crW, height: crH } = fillTextManualLines(els.copyright.value, crX, crY, crSize * 1.3);
+    recordBounds('copyright', crX - crW, crY - crSize * 0.8, crW, crH);
     ctx.restore();
   }
 
@@ -1674,9 +1735,8 @@ function renderCurrentLayout() {
     ctx.fillStyle = etAdj.colorOverride || bandTextHex;
     ctx.globalAlpha = 0.7;
     const etX = W - MARGIN + etAdj.dx, etY = W - 24 - 26 + etAdj.dy;
-    const etW = ctx.measureText(els.extraText.value).width;
-    ctx.fillText(els.extraText.value, etX, etY);
-    recordBounds('extraText', etX - etW, etY - etSize * 0.8, etW, etSize);
+    const { width: etW, height: etH } = fillTextManualLines(els.extraText.value, etX, etY, etSize * 1.3);
+    recordBounds('extraText', etX - etW, etY - etSize * 0.8, etW, etH);
     ctx.restore();
   }
 }
@@ -1948,7 +2008,12 @@ function renderFrameTemplate() {
   // separate element, not a replacement, so subCopy keeps working here
   // exactly like it does in 集客 mode.
   const ctaSource = els.subCopy.value.trim() ? 'subCopy' : els.mainCopy.value.trim() ? 'mainCopy' : 'subCopy';
-  const ctaText = (els.subCopy.value || els.mainCopy.value).trim();
+  // A pill-shaped badge only ever has room for one line — flatten a manual
+  // Enter/｜ break (meaningful in subCopy/mainCopy's other, prose-shaped
+  // uses) into a space here rather than feeding a literal newline into
+  // fitFontSizeTruncate, which doesn't understand it and would leave a
+  // stray gap or tofu glyph instead of an actual line break.
+  const ctaText = (els.subCopy.value || els.mainCopy.value).trim().replace(/[|｜\n]/g, ' ');
   let ctaPillTop = rowY - 29;
   if (ctaText) {
     const ctaAdj = adj(ctaSource);
@@ -1998,10 +2063,9 @@ function renderFrameTemplate() {
     ctx.globalAlpha = 0.6;
     const crX = W - MARGIN + crAdj.dx;
     const crY = W - 22 + crAdj.dy;
-    ctx.fillText(els.copyright.value, crX, crY);
-    const crW = ctx.measureText(els.copyright.value).width;
+    const { width: crW, height: crH } = fillTextManualLines(els.copyright.value, crX, crY, crSize * 1.3);
     ctx.restore();
-    recordBounds('copyright', crX - crW, crY - crSize * 0.8, crW, crSize);
+    recordBounds('copyright', crX - crW, crY - crSize * 0.8, crW, crH);
   }
 
   useLayer('extraText');
@@ -2016,10 +2080,9 @@ function renderFrameTemplate() {
     ctx.globalAlpha = 0.6;
     const etX = W - MARGIN + etAdj.dx;
     const etY = W - 22 - 24 + etAdj.dy;
-    ctx.fillText(els.extraText.value, etX, etY);
-    const etW = ctx.measureText(els.extraText.value).width;
+    const { width: etW, height: etH } = fillTextManualLines(els.extraText.value, etX, etY, etSize * 1.3);
     ctx.restore();
-    recordBounds('extraText', etX - etW, etY - etSize * 0.8, etW, etSize);
+    recordBounds('extraText', etX - etW, etY - etSize * 0.8, etW, etH);
   }
 }
 
@@ -2125,7 +2188,12 @@ function renderLineupTemplate() {
   const rowY = bottomBlockTop + bottomBlockH / 2;
 
   const ctaSource = els.subCopy.value.trim() ? 'subCopy' : els.mainCopy.value.trim() ? 'mainCopy' : 'subCopy';
-  const ctaText = (els.subCopy.value || els.mainCopy.value).trim();
+  // A pill-shaped badge only ever has room for one line — flatten a manual
+  // Enter/｜ break (meaningful in subCopy/mainCopy's other, prose-shaped
+  // uses) into a space here rather than feeding a literal newline into
+  // fitFontSizeTruncate, which doesn't understand it and would leave a
+  // stray gap or tofu glyph instead of an actual line break.
+  const ctaText = (els.subCopy.value || els.mainCopy.value).trim().replace(/[|｜\n]/g, ' ');
   let ctaPillTop = rowY - 29;
   if (ctaText) {
     const ctaAdj = adj(ctaSource);
@@ -2171,10 +2239,9 @@ function renderLineupTemplate() {
     ctx.globalAlpha = 0.6;
     const crX = W - MARGIN + crAdj.dx;
     const crY = W - 22 + crAdj.dy;
-    ctx.fillText(els.copyright.value, crX, crY);
-    const crW = ctx.measureText(els.copyright.value).width;
+    const { width: crW, height: crH } = fillTextManualLines(els.copyright.value, crX, crY, crSize * 1.3);
     ctx.restore();
-    recordBounds('copyright', crX - crW, crY - crSize * 0.8, crW, crSize);
+    recordBounds('copyright', crX - crW, crY - crSize * 0.8, crW, crH);
   }
 
   useLayer('extraText');
@@ -2188,10 +2255,9 @@ function renderLineupTemplate() {
     ctx.globalAlpha = 0.6;
     const etX = W - MARGIN + etAdj.dx;
     const etY = W - 22 - 24 + etAdj.dy;
-    ctx.fillText(els.extraText.value, etX, etY);
-    const etW = ctx.measureText(els.extraText.value).width;
+    const { width: etW, height: etH } = fillTextManualLines(els.extraText.value, etX, etY, etSize * 1.3);
     ctx.restore();
-    recordBounds('extraText', etX - etW, etY - etSize * 0.8, etW, etSize);
+    recordBounds('extraText', etX - etW, etY - etSize * 0.8, etW, etH);
   }
 }
 
@@ -2295,11 +2361,11 @@ function renderSpotlightFrameTemplate() {
     let font = `500 ${Math.round(30 * mainCopyAdj.scale / 100)}px ${FONT_STACK}`;
     let subLines;
     if (state.mainCopyNoWrap) {
-      const fit = fitFontSizeTruncate(subCopyText, W - 2 * 150, 500, FONT_STACK, 30, 10, 0);
+      const fit = fitFontSizeTruncateOrManual(subCopyText, W - 2 * 150, 500, FONT_STACK, 30, 10, 0);
       font = `500 ${fit.size * mainCopyAdj.scale / 100}px ${FONT_STACK}`;
-      subLines = [fit.text];
+      subLines = fit.lines.slice(0, 2);
     } else {
-      subLines = wrapFn(subCopyText, W - 2 * 150, font).slice(0, 2);
+      subLines = wrapTextManual(subCopyText, W - 2 * 150, font, isCjkLang).slice(0, 2);
     }
     ctx.font = font;
     ctx.textAlign = 'center';
@@ -2328,7 +2394,9 @@ function renderSpotlightFrameTemplate() {
   // replacement, so subCopy keeps working here exactly like it does in
   // 集客 mode.
   useLayer('subCopy');
-  const ctaText = els.subCopy.value.trim();
+  // Flattened for the same reason as the ③⑥ CTA pill — a single-line
+  // badge/CTA text can't render a literal newline character usefully.
+  const ctaText = els.subCopy.value.trim().replace(/[|｜\n]/g, ' ');
   if (ctaText) {
     const subCopyAdj = adj('subCopy');
     const ctaFit = fitFontSizeTruncate(ctaText, W - 2 * MARGIN, 800, FONT_STACK, 40, 24, 0);
@@ -2370,10 +2438,9 @@ function renderSpotlightFrameTemplate() {
     ctx.textAlign = isRtl ? 'left' : 'right';
     const crX = (isRtl ? MARGIN : W - MARGIN) + crAdj.dx;
     const crY = W - 24 + crAdj.dy;
-    ctx.fillText(els.copyright.value, crX, crY);
-    const crW = ctx.measureText(els.copyright.value).width;
+    const { width: crW, height: crH } = fillTextManualLines(els.copyright.value, crX, crY, crSize * 1.3);
     ctx.globalAlpha = 1;
-    recordBounds('copyright', isRtl ? crX : crX - crW, crY - crSize * 0.8, crW, crSize);
+    recordBounds('copyright', isRtl ? crX : crX - crW, crY - crSize * 0.8, crW, crH);
   }
 
   useLayer('extraText');
@@ -2388,10 +2455,9 @@ function renderSpotlightFrameTemplate() {
     ctx.textAlign = isRtl ? 'left' : 'right';
     const etX = (isRtl ? MARGIN : W - MARGIN) + etAdj.dx;
     const etY = W - 24 - 26 + etAdj.dy;
-    ctx.fillText(els.extraText.value, etX, etY);
-    const etW = ctx.measureText(els.extraText.value).width;
+    const { width: etW, height: etH } = fillTextManualLines(els.extraText.value, etX, etY, etSize * 1.3);
     ctx.globalAlpha = 1;
-    recordBounds('extraText', isRtl ? etX : etX - etW, etY - etSize * 0.8, etW, etSize);
+    recordBounds('extraText', isRtl ? etX : etX - etW, etY - etSize * 0.8, etW, etH);
   }
 }
 
@@ -2565,12 +2631,12 @@ function renderCutoutTemplate() {
     // してて..."). Truncating with an ellipsis at this floor (same
     // guaranteed-minimum-size approach fitFontSizeWrap already uses for
     // titles) reads better than silently shrinking past subCopy's size.
-    const fit = fitFontSizeTruncate(mainCopy, copyMaxW, 800, FONT_STACK, 38, 26, 0);
+    const fit = fitFontSizeTruncateOrManual(mainCopy, copyMaxW, 800, FONT_STACK, 38, 26, 0);
     mainFont = `800 ${fit.size * mainCopyAdj.scale / 100}px ${FONT_STACK}`;
-    mainLines = [fit.text];
+    mainLines = fit.lines;
   } else {
     ctx.font = mainFont;
-    mainLines = wrapFn(mainCopy, copyMaxW, mainFont);
+    mainLines = wrapTextManual(mainCopy, copyMaxW, mainFont, isCjkLang);
   }
   let subFontFinal = subFont;
   let subLines;
@@ -2578,12 +2644,12 @@ function renderCutoutTemplate() {
     subLines = [];
   } else if (state.subCopyNoWrap) {
     // Floor kept below mainCopy's (26px) so subCopy can never out-grow it.
-    const subFit = fitFontSizeTruncate(subCopy, copyMaxW, 400, FONT_STACK, 24, 14, 0);
+    const subFit = fitFontSizeTruncateOrManual(subCopy, copyMaxW, 400, FONT_STACK, 24, 14, 0);
     subFontFinal = `400 ${subFit.size * subCopyAdj.scale / 100}px ${FONT_STACK}`;
-    subLines = [subFit.text];
+    subLines = subFit.lines;
   } else {
     ctx.font = subFont;
-    subLines = wrapFn(subCopy, copyMaxW, subFont);
+    subLines = wrapTextManual(subCopy, copyMaxW, subFont, isCjkLang);
   }
 
   const lineH1 = 46, lineH2 = 32, gapBetween = 10;
@@ -2664,10 +2730,9 @@ function renderCutoutTemplate() {
     ctx.globalAlpha = 0.8;
     const crX = textLeft + crAdj.dx;
     const crY = W - MARGIN + 4 + crAdj.dy;
-    ctx.fillText(els.copyright.value, crX, crY);
-    const crW = ctx.measureText(els.copyright.value).width;
+    const { width: crW, height: crH } = fillTextManualLines(els.copyright.value, crX, crY, crSize * 1.3);
     ctx.globalAlpha = 1;
-    recordBounds('copyright', crX, crY - crSize * 0.8, crW, crSize);
+    recordBounds('copyright', crX, crY - crSize * 0.8, crW, crH);
   }
 
   useLayer('extraText');
@@ -2681,10 +2746,9 @@ function renderCutoutTemplate() {
     ctx.globalAlpha = 0.8;
     const etX = textLeft + etAdj.dx;
     const etY = W - MARGIN + 4 - 26 + etAdj.dy;
-    ctx.fillText(els.extraText.value, etX, etY);
-    const etW = ctx.measureText(els.extraText.value).width;
+    const { width: etW, height: etH } = fillTextManualLines(els.extraText.value, etX, etY, etSize * 1.3);
     ctx.globalAlpha = 1;
-    recordBounds('extraText', etX, etY - etSize * 0.8, etW, etSize);
+    recordBounds('extraText', etX, etY - etSize * 0.8, etW, etH);
   }
 }
 
@@ -2910,7 +2974,7 @@ function renderVerticalTitleTemplate() {
   useLayer('dates');
   // ---- Vertical date, left side ----
   const datesAdj = adj('dates');
-  const dateOverrideText = els.dateOverride.value.trim();
+  const dateOverrideText = els.dateOverride.value.trim().replace(/[|｜\n]/g, ' ');
   const dateEndLabel = formatBannerDate(els.dateEnd.value, state.currentLang);
   // Sale mode never shows a start date — see buildInfoLineParts() for why.
   const dateText = state.bannerPurpose === 'sale'
@@ -2979,7 +3043,9 @@ function renderVerticalTitleTemplate() {
 
   const bandTextColor = pickTextColor(accent);
   const bandTextHex = rgbToHex(bandTextColor);
-  const ctaText = els.mainCopy.value || els.subCopy.value || saleCtaFallback();
+  // Flattened for the same reason as the ③⑥ CTA pill — a single-line CTA
+  // treatment can't render a literal newline character usefully.
+  const ctaText = (els.mainCopy.value || els.subCopy.value || saleCtaFallback()).replace(/[|｜\n]/g, ' ');
   const ctaSourceV2 = els.mainCopy.value.trim() ? 'mainCopy' : 'subCopy';
   useLayer(ctaSourceV2);
   if (ctaText) {
@@ -3018,7 +3084,7 @@ function renderVerticalTitleTemplate() {
   useLayer('venue');
   // ---- Venue name, just above the band (not shown at all in sale mode) ----
   const venueAdj = adj('venue');
-  const venueLine = state.bannerPurpose === 'sale' ? '' : els.venue.value.trim();
+  const venueLine = state.bannerPurpose === 'sale' ? '' : els.venue.value.trim().replace(/[|｜\n]/g, ' ');
   if (venueLine) {
     const venueSize = Math.round(24 * venueAdj.scale / 100);
     ctx.font = `600 ${venueSize}px ${FONT_STACK}`;
@@ -3053,10 +3119,9 @@ function renderVerticalTitleTemplate() {
     ctx.fillStyle = crAdj.colorOverride || white;
     ctx.globalAlpha = 0.7;
     const crX = MARGIN + crAdj.dx, crY = W - 20 + crAdj.dy;
-    ctx.fillText(els.copyright.value, crX, crY);
-    const crW = ctx.measureText(els.copyright.value).width;
+    const { width: crW, height: crH } = fillTextManualLines(els.copyright.value, crX, crY, crSize * 1.3);
     ctx.restore();
-    recordBounds('copyright', crX, crY - crSize * 0.8, crW, crSize);
+    recordBounds('copyright', crX, crY - crSize * 0.8, crW, crH);
   }
 
   useLayer('extraText');
@@ -3070,10 +3135,9 @@ function renderVerticalTitleTemplate() {
     ctx.fillStyle = etAdj.colorOverride || white;
     ctx.globalAlpha = 0.7;
     const etX = MARGIN + etAdj.dx, etY = W - 20 - 26 + etAdj.dy;
-    ctx.fillText(els.extraText.value, etX, etY);
-    const etW = ctx.measureText(els.extraText.value).width;
+    const { width: etW, height: etH } = fillTextManualLines(els.extraText.value, etX, etY, etSize * 1.3);
     ctx.restore();
-    recordBounds('extraText', etX, etY - etSize * 0.8, etW, etSize);
+    recordBounds('extraText', etX, etY - etSize * 0.8, etW, etH);
   }
 }
 
@@ -3203,7 +3267,9 @@ function renderCyberUiTemplate() {
   // purpose) — the dedicated sale-tag/price pills (below) are a separate
   // element, not a replacement, so subCopy keeps working here exactly like
   // it does in 集客 mode.
-  const ctaLabel = (els.subCopy.value || 'ONLINE SALE').toUpperCase();
+  // Flattened for the same reason as the ③⑥ CTA pill — a single-line HUD
+  // badge can't render a literal newline character usefully.
+  const ctaLabel = (els.subCopy.value || 'ONLINE SALE').toUpperCase().replace(/[|｜\n]/g, ' ');
   const ctaFontSize = 20 * subCopyAdj.scale / 100;
   ctx.font = `700 ${ctaFontSize}px ${mono}`;
   const ctaW = ctx.measureText(ctaLabel).width;
@@ -3290,12 +3356,12 @@ function renderCyberUiTemplate() {
     let font = `700 ${Math.round(46 * mainCopyAdj.scale / 100)}px ${TITLE_FONT_STACK}`;
     let copyLines;
     if (state.mainCopyNoWrap) {
-      const fit = fitFontSizeTruncate(mainCopy, maxW, 700, TITLE_FONT_STACK, 46, 10, 0);
+      const fit = fitFontSizeTruncateOrManual(mainCopy, maxW, 700, TITLE_FONT_STACK, 46, 10, 0);
       font = `700 ${fit.size * mainCopyAdj.scale / 100}px ${TITLE_FONT_STACK}`;
-      copyLines = [fit.text];
+      copyLines = fit.lines;
     } else {
       ctx.font = font;
-      copyLines = wrapText(mainCopy, maxW, font);
+      copyLines = wrapTextManual(mainCopy, maxW, font, false);
     }
     const lineH = 56;
     let ty = W - MARGIN - bl - 96 - (copyLines.length - 1) * lineH;
@@ -3337,10 +3403,9 @@ function renderCyberUiTemplate() {
     ctx.globalAlpha = 0.55;
     const crX = W - inset - bl - 14 + crAdj.dx;
     const crY = W - inset - bl - 14 + crAdj.dy;
-    ctx.fillText(els.copyright.value, crX, crY);
-    const crW = ctx.measureText(els.copyright.value).width;
+    const { width: crW, height: crH } = fillTextManualLines(els.copyright.value, crX, crY, crSize * 1.3);
     ctx.globalAlpha = 1;
-    recordBounds('copyright', crX - crW, crY - crSize * 0.8, crW, crSize);
+    recordBounds('copyright', crX - crW, crY - crSize * 0.8, crW, crH);
   }
 
   useLayer('extraText');
@@ -3354,10 +3419,9 @@ function renderCyberUiTemplate() {
     ctx.globalAlpha = 0.55;
     const etX = W - inset - bl - 14 + etAdj.dx;
     const etY = W - inset - bl - 14 - 22 + etAdj.dy;
-    ctx.fillText(els.extraText.value, etX, etY);
-    const etW = ctx.measureText(els.extraText.value).width;
+    const { width: etW, height: etH } = fillTextManualLines(els.extraText.value, etX, etY, etSize * 1.3);
     ctx.globalAlpha = 1;
-    recordBounds('extraText', etX - etW, etY - etSize * 0.8, etW, etSize);
+    recordBounds('extraText', etX - etW, etY - etSize * 0.8, etW, etH);
   }
 }
 

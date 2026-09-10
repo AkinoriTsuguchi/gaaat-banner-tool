@@ -83,6 +83,12 @@
     resize:vertical;
   }
   textarea{min-height:64px;line-height:1.5;}
+  /* Fields that are usually one short line but now accept Enter for a
+     manual line break (like titleField already did) — start compact like
+     the plain inputs they replaced instead of title's taller default, but
+     keep the same resize handle so a field that grows to 2-3 lines can be
+     dragged taller. */
+  textarea.compact-textarea{min-height:36px;}
   .row{display:flex; gap:8px;}
   .row > div{flex:1;}
   .swatches{display:flex; gap:10px; margin-top:10px;}
@@ -1050,36 +1056,36 @@
       <p class="hint" id="dateFieldHint">日付・曜日の表示形式は選択中の言語に合わせて自動で変わります（例: 08.21 (Fri.) / 08.21（金））。案件マスタの会場を選ぶと自動反映されます（全言語共通）。</p>
 
       <label for="dateOverrideField">会期情報の表示テキスト（任意・自由入力）</label>
-      <input type="text" id="dateOverrideField" placeholder="空欄なら上の開始日・終了日から自動生成されます">
-      <p class="hint">通期開催や「随時」など、開始日・終了日だけでは表現できない会期は、ここに直接入力すると上の日付ではなくこちらがそのまま表示されます（バナー上の文字列を丸ごと置き換えます）。</p>
+      <textarea id="dateOverrideField" class="compact-textarea" rows="1" placeholder="空欄なら上の開始日・終了日から自動生成されます"></textarea>
+      <p class="hint">通期開催や「随時」など、開始日・終了日だけでは表現できない会期は、ここに直接入力すると上の日付ではなくこちらがそのまま表示されます（バナー上の文字列を丸ごと置き換えます）。Enterで改行もできます。</p>
 
       <label id="venueFieldLabel">開催会場名</label>
-      <input type="text" id="venueField" value="GAAAT GALLERY FUKUOKA_">
+      <textarea id="venueField" class="compact-textarea" rows="1">GAAAT GALLERY FUKUOKA_</textarea>
       <p class="hint" id="venueFieldHint">案件マスタの会場を選ぶと自動反映されます（全言語共通）。</p>
 
       <label id="priceFieldLabel" style="display:none;">価格・オファー文言（任意）</label>
-      <input type="text" id="priceField" style="display:none;" placeholder="例: ¥3,300（税込）〜 ／ 数量限定">
+      <textarea id="priceField" class="compact-textarea" rows="1" style="display:none;" placeholder="例: ¥3,300（税込）〜 ／ 数量限定"></textarea>
       <p class="hint" id="priceFieldHint" style="display:none;">空欄なら価格は一切表示されません。実際の販売額と食い違うと誤解を招くため、金額は自動生成・自動補完せず、正確な額を確認できた時だけ手入力してください。</p>
 
       <div class="field-label-row" style="display:none;">
         <label id="saleTagFieldLabel">セールタグバッジ（例: アート作品 オンライン販売中）※任意</label>
         <label class="lang-toggle"><input type="checkbox" id="langToggle_saleTag" checked><span>言語別</span></label>
       </div>
-      <input type="text" id="saleTagField" style="display:none;" placeholder="例: アート作品 オンライン販売中（空欄なら表示されません）">
+      <textarea id="saleTagField" class="compact-textarea" rows="1" style="display:none;" placeholder="例: アート作品 オンライン販売中（空欄なら表示されません）"></textarea>
       <p class="hint" id="saleTagHint" style="display:none;">GAAATの実制作物にあるような、CTAボタン的に使えるバッジです。空欄の場合は何も表示されません（自動で文言は入りません）。</p>
 
       <div class="field-label-row">
         <label>メインコピー（帯・太字1行目）</label>
         <label class="lang-toggle"><input type="checkbox" id="langToggle_mainCopy" checked><span>言語別</span></label>
       </div>
-      <input type="text" id="mainCopyField" value="歴代シリーズを横断する 唯一無二の展示・販売会。">
+      <textarea id="mainCopyField" class="compact-textarea" rows="1">歴代シリーズを横断する 唯一無二の展示・販売会。</textarea>
       <label class="lang-toggle"><input type="checkbox" id="mainCopyNoWrapToggle" checked><span>1行に収める（自動改行しない・収まらない分は自動縮小）</span></label>
 
       <div class="field-label-row">
         <label id="subCopyFieldLabel">サブコピー（帯・2行目）</label>
         <label class="lang-toggle"><input type="checkbox" id="langToggle_subCopy" checked><span>言語別</span></label>
       </div>
-      <input type="text" id="subCopyField" value="全国5都市開催">
+      <textarea id="subCopyField" class="compact-textarea" rows="1">全国5都市開催</textarea>
       <label class="lang-toggle"><input type="checkbox" id="subCopyNoWrapToggle" checked><span>1行に収める（自動改行しない・収まらない分は自動縮小）</span></label>
 
       <label for="subCopyPillShapeSelect">サブコピーの枠の形（③⑥のCTAバッジのみ）</label>
@@ -1093,14 +1099,14 @@
         <label>コピーライト（素材上に小さく表示）</label>
         <label class="lang-toggle"><input type="checkbox" id="langToggle_copyright" checked><span>言語別</span></label>
       </div>
-      <input type="text" id="copyrightField" value="©HEADGEAR">
+      <textarea id="copyrightField" class="compact-textarea" rows="1">©HEADGEAR</textarea>
 
       <div class="field-label-row">
         <label>追加テキスト（任意・自由に使える項目）</label>
         <label class="lang-toggle"><input type="checkbox" id="langToggle_extraText" checked><span>言語別</span></label>
       </div>
-      <input type="text" id="extraTextField" placeholder="例: 会場限定グッズあり、ハッシュタグ、注意書きなど">
-      <p class="hint">タイトル・メインコピー・サブコピー・コピーライト以外に何か追記したい時に使う自由記入欄です。空欄なら何も表示されません。表示位置・サイズは下の「レイアウト微調整」で動かせます（キャンバス上のドラッグ・四隅リサイズにも対応）。</p>
+      <textarea id="extraTextField" class="compact-textarea" rows="1" placeholder="例: 会場限定グッズあり、ハッシュタグ、注意書きなど"></textarea>
+      <p class="hint">タイトル・メインコピー・サブコピー・コピーライト以外に何か追記したい時に使う自由記入欄です。空欄なら何も表示されません。表示位置・サイズは下の「レイアウト微調整」で動かせます（キャンバス上のドラッグ・四隅リサイズにも対応）。Enterで改行もできます。</p>
     </fieldset>
 
     <fieldset>
@@ -1385,6 +1391,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=105"></script>
+<script src="app.js?v=106"></script>
 </body>
 </html>
