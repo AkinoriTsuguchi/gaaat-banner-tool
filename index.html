@@ -577,6 +577,60 @@
     opacity:.45;
     cursor:default;
   }
+  .drive-review-toggle{
+    display:flex;
+    align-items:flex-start;
+    gap:6px;
+    font-size:11px;
+    color:var(--muted);
+    cursor:pointer;
+    line-height:1.4;
+  }
+  .drive-review-toggle input{
+    margin-top:1px;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  /* Shown only while runDriveMultiExport() is paused waiting for the user
+     to look at (and optionally eyedrop-adjust) the current file's color —
+     the live canvas and the ordinary bg/accent color pickers above stay
+     fully visible and interactive during the pause, so this doesn't need
+     its own color controls or a preview copy of its own. */
+  .drive-review-controls{
+    background:var(--panel-bg2);
+    border:1px solid var(--accent);
+    border-radius:6px;
+    padding:8px 10px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .drive-review-buttons{
+    display:flex;
+    gap:8px;
+  }
+  #driveReviewNextBtn{
+    flex:1;
+    white-space:nowrap;
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    border-radius:4px;
+    font-size:12px;
+    font-weight:600;
+    padding:8px;
+    cursor:pointer;
+  }
+  #driveReviewCancelBtn{
+    white-space:nowrap;
+    background:var(--panel-bg);
+    color:var(--text);
+    border:1px solid var(--border);
+    border-radius:4px;
+    font-size:12px;
+    padding:8px 12px;
+    cursor:pointer;
+  }
 
   /* ---- Image upload zones: click/tab into one, then Ctrl/Cmd+V to paste
      a copied image (e.g. a screenshot) instead of picking a file. No
@@ -1051,7 +1105,18 @@
         <div id="driveFileGrid" class="drive-file-grid" style="display:none;"></div>
         <div id="driveMultiExportRow" class="drive-multi-export-row" style="display:none;">
           <p class="hint">画像左上のチェックで複数選択すると、今のテンプレート・コピーのまま画像だけ差し替えて一括書き出しできます（テンプレートは固定、配色だけ画像ごとに自動抽出されます）。</p>
+          <label class="drive-review-toggle">
+            <input type="checkbox" id="driveReviewEachCheckbox">
+            1枚ごとに配色を確認してから書き出す（自動抽出された色が違う場合はカラーピッカーのスポイトで直接調整できます）
+          </label>
           <button type="button" id="driveMultiExportBtn">選択した画像で一括書き出し（<span id="driveMultiExportCount">0</span>件）</button>
+          <div id="driveReviewControls" class="drive-review-controls" style="display:none;">
+            <span id="driveReviewLabel" class="hint"></span>
+            <div class="drive-review-buttons">
+              <button type="button" id="driveReviewNextBtn">この配色で次へ →</button>
+              <button type="button" id="driveReviewCancelBtn">中止</button>
+            </div>
+          </div>
           <p class="hint" id="driveMultiExportStatus" style="display:none;"></p>
         </div>
       </div>
@@ -1462,6 +1527,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=113"></script>
+<script src="app.js?v=114"></script>
 </body>
 </html>

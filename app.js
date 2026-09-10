@@ -701,6 +701,11 @@ const els = {
   driveMultiExportBtn: document.getElementById('driveMultiExportBtn'),
   driveMultiExportCount: document.getElementById('driveMultiExportCount'),
   driveMultiExportStatus: document.getElementById('driveMultiExportStatus'),
+  driveReviewEachCheckbox: document.getElementById('driveReviewEachCheckbox'),
+  driveReviewControls: document.getElementById('driveReviewControls'),
+  driveReviewLabel: document.getElementById('driveReviewLabel'),
+  driveReviewNextBtn: document.getElementById('driveReviewNextBtn'),
+  driveReviewCancelBtn: document.getElementById('driveReviewCancelBtn'),
   download: document.getElementById('downloadBtn'),
   downloadLayersZipBtn: document.getElementById('downloadLayersZipBtn'),
   downloadPsdBtn: document.getElementById('downloadPsdBtn'),
@@ -5960,6 +5965,45 @@ async function selectDriveFile(file) {
 // 一括で書き出してほしい／テンプレートを勝手に変えるとかやめて"), so
 // letting the template drift per image silently — even opt-in — surprised
 // more than it helped. Colors still auto-extract per image as before.
+const DRIVE_REVIEW_CANCELLED = 'DRIVE_REVIEW_CANCELLED';
+
+// Pauses the batch loop on the current (already-rendered) file so the user
+// can look at it — and, if the auto-extracted color isn't right, adjust it
+// directly via the ordinary bg/accent color pickers (their native eyedropper
+// included) sitting right above, which are already wired to state.colors +
+// render(). Resolves once 次へ is clicked (whatever state.colors holds at
+// that moment, edited or not, is what gets exported); rejects with
+// DRIVE_REVIEW_CANCELLED if 中止 is clicked instead.
+function waitForDriveReviewConfirm(file, index, total) {
+  return new Promise((resolve, reject) => {
+    els.driveReviewLabel.textContent = `${file.name} (${index}/${total}) — 配色を確認し、必要ならカラーピッカーで調整してください。`;
+    els.driveReviewControls.style.display = 'flex';
+    function cleanup() {
+      els.driveReviewControls.style.display = 'none';
+      els.driveReviewNextBtn.removeEventListener('click', onNext);
+      els.driveReviewCancelBtn.removeEventListener('click', onCancel);
+    }
+    function onNext() { cleanup(); resolve(); }
+    function onCancel() { cleanup(); reject(new Error(DRIVE_REVIEW_CANCELLED)); }
+    els.driveReviewNextBtn.addEventListener('click', onNext);
+    els.driveReviewCancelBtn.addEventListener('click', onCancel);
+  });
+}
+
+// Shared by the normal end-of-batch download and the 中止-during-review
+// path below, so a cancelled run still packages whatever was confirmed.
+async function downloadDriveExportZip(zip, count) {
+  if (!zip || count === 0) return;
+  const content = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(content);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  a.href = url;
+  a.download = `gaaat-banners_${stamp}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 async function runDriveMultiExport() {
   const files = getSelectedDriveFiles();
   if (!files.length) return;
@@ -5967,8 +6011,10 @@ async function runDriveMultiExport() {
   const prevArtImage = state.artImage;
   const prevBg = state.colors.bg, prevAccent = state.colors.accent, prevAccentRaw = state.colors.accentRaw;
   const prevTemplate = state.template;
+  const reviewEach = els.driveReviewEachCheckbox.checked;
 
   els.driveMultiExportBtn.disabled = true;
+  els.driveReviewEachCheckbox.disabled = true;
   els.driveMultiExportStatus.style.display = '';
   els.driveMultiExportStatus.classList.remove('error');
 
@@ -5990,6 +6036,10 @@ async function runDriveMultiExport() {
       syncColorPickers();
       render();
       await new Promise(r => requestAnimationFrame(r));
+
+      if (reviewEach) {
+        await waitForDriveReviewConfirm(file, done + 1, files.length);
+      }
 
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
       const baseName = sanitizeFilename(file.name.replace(/\.[^.]+$/, '')) || `image${done}`;
@@ -6014,22 +6064,25 @@ async function runDriveMultiExport() {
       els.driveMultiExportStatus.textContent = `${done}/${files.length} 完了`;
     }
 
-    if (zip) {
-      const content = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(content);
-      const a = document.createElement('a');
-      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      a.href = url;
-      a.download = `gaaat-banners_${stamp}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
+    await downloadDriveExportZip(zip, done);
     els.driveMultiExportStatus.textContent = `${done}件のバナーを書き出しました。`;
   } catch (err) {
-    console.error(err);
-    els.driveMultiExportStatus.classList.add('error');
-    els.driveMultiExportStatus.textContent = `書き出しに失敗しました: ${err.message}`;
+    // 中止 during the per-file review pause — package whatever was already
+    // confirmed before stopping, rather than discarding it, since the user
+    // may well have reviewed several images before deciding to stop there.
+    if (err.message === DRIVE_REVIEW_CANCELLED) {
+      await downloadDriveExportZip(zip, done);
+      els.driveMultiExportStatus.textContent = done > 0
+        ? `中止しました（${done}件は書き出し済みです）。`
+        : '中止しました。';
+    } else {
+      console.error(err);
+      els.driveMultiExportStatus.classList.add('error');
+      els.driveMultiExportStatus.textContent = `書き出しに失敗しました: ${err.message}`;
+    }
   } finally {
+    els.driveReviewControls.style.display = 'none';
+    els.driveReviewEachCheckbox.disabled = false;
     state.artImage = prevArtImage;
     state.colors.bg = prevBg;
     state.colors.accent = prevAccent;
