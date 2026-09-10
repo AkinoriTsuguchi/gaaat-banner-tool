@@ -194,6 +194,17 @@
     color:var(--muted);font-weight:700;
   }
   #folderInfo .nextsteps .where:first-of-type{margin-top:0;}
+  #folderInfo .nextsteps .warn{
+    margin:0 0 10px;font-size:11.5px;line-height:1.7;color:var(--warn, #d8a642);
+    background:rgba(216,166,66,.10);border-left:3px solid #d8a642;
+    border-radius:4px;padding:8px 12px;
+  }
+  #folderInfo .dlbtn{
+    display:inline-block;padding:7px 14px;border:1px solid var(--border);
+    border-radius:6px;font-size:12px;font-weight:600;color:var(--text);
+    text-decoration:none;background:var(--panel-bg2);
+  }
+  #folderInfo .dlbtn:hover{background:#31353d;}
   #folderInfo .nextbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
   #folderInfo .nextbtns button{margin-top:0;}
   #folderInfo button.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
@@ -356,6 +367,6 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="../shared/google.js?v=6"></script>
 <script src="../shared/master-sheet.js?v=6"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

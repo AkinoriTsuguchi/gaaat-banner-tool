@@ -905,7 +905,9 @@
         'ダウンロードフォルダの preflight.jsx を選んで「開く」',
         '「' + (path[path.length - 1] || 'このフォルダ') + ' をチェックしますか？」→ はい',
         '数分待つ（.ai はスクリプトが開いて、保存せず閉じます）'
-      ] },
+      ], warn:
+        'ここで Finder のフォルダ選択が出てきたら、preflight.jsx が古い版です。' +
+        '下の「preflight.jsx を保存（最新版）」で上書き保存し直してください。' },
       { where: 'このページに戻って', steps: [
         '「② 結果を取り込む」を押す → 5項目そろった判定が出ます'
       ] }
@@ -921,6 +923,12 @@
         ol.appendChild(li);
       });
       next.appendChild(ol);
+      if (group.warn) {
+        const w = document.createElement('p');
+        w.className = 'warn';
+        w.textContent = group.warn;
+        next.appendChild(w);
+      }
     });
 
     const row = document.createElement('div');
@@ -978,6 +986,16 @@
       els.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     row.appendChild(jump);
+
+    // 前に落としたまま古い版を使い続ける事故が実際に起きたので、
+    // 手順のすぐ横でいつでも取り直せるようにしておく。
+    const dl = document.createElement('a');
+    dl.className = 'dlbtn';
+    dl.href = 'preflight.jsx';
+    dl.setAttribute('download', '');
+    dl.textContent = 'preflight.jsx を保存（最新版）';
+    row.appendChild(dl);
+
     next.appendChild(row);
 
     const note = document.createElement('p');
