@@ -656,6 +656,10 @@ const els = {
   driveLoadFolderBtn: document.getElementById('driveLoadFolderBtn'),
   driveStatus: document.getElementById('driveStatus'),
   driveFileGrid: document.getElementById('driveFileGrid'),
+  driveMultiExportRow: document.getElementById('driveMultiExportRow'),
+  driveMultiExportBtn: document.getElementById('driveMultiExportBtn'),
+  driveMultiExportCount: document.getElementById('driveMultiExportCount'),
+  driveMultiExportStatus: document.getElementById('driveMultiExportStatus'),
   download: document.getElementById('downloadBtn'),
   downloadLayersZipBtn: document.getElementById('downloadLayersZipBtn'),
   downloadPsdBtn: document.getElementById('downloadPsdBtn'),
@@ -5770,6 +5774,20 @@ function renderDriveFileGrid(files) {
     item.className = 'drive-file-item' + (isMatch ? ' match' : '');
     item.title = file.name;
 
+    // Multi-select checkbox for batch export — separate from the item's own
+    // click (which still loads that one image into the live editor right
+    // away), so previewing one image and marking several for later export
+    // don't interfere with each other.
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'select-check';
+    check.addEventListener('click', e => e.stopPropagation());
+    check.addEventListener('change', () => {
+      item.classList.toggle('selected', check.checked);
+      updateDriveMultiExportUI();
+    });
+    item.appendChild(check);
+
     if (file.thumbnailLink) {
       const img = document.createElement('img');
       img.src = file.thumbnailLink;
@@ -5791,9 +5809,25 @@ function renderDriveFileGrid(files) {
     }
 
     item.addEventListener('click', () => selectDriveFile(file));
+    item.__driveFile = file;
     els.driveFileGrid.appendChild(item);
   });
   els.driveFileGrid.style.display = 'grid';
+  updateDriveMultiExportUI();
+}
+
+// Reads which grid items are checked and shows/hides the batch-export row
+// accordingly — called after every checkbox toggle and every grid re-render.
+function getSelectedDriveFiles() {
+  return Array.from(els.driveFileGrid.querySelectorAll('.drive-file-item'))
+    .filter(item => item.querySelector('.select-check').checked)
+    .map(item => item.__driveFile);
+}
+
+function updateDriveMultiExportUI() {
+  const count = getSelectedDriveFiles().length;
+  els.driveMultiExportCount.textContent = String(count);
+  els.driveMultiExportRow.style.display = count > 0 ? 'flex' : 'none';
 }
 
 async function loadDriveFolder(folderId) {
@@ -5835,6 +5869,26 @@ els.driveLoadFolderBtn.addEventListener('click', () => {
   loadDriveFolder(folderId);
 });
 
+// Downloads one Drive file's bytes and decodes it into an <img> — shared by
+// the single-image picker below and the multi-image batch export.
+async function fetchDriveFileAsImage(file) {
+  const res = await googleApiFetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`);
+  const blob = await res.blob();
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+  const img = new Image();
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+  return img;
+}
+
 // Downloads the selected file's bytes and feeds them into the exact same
 // pipeline as a manual file upload (extractPalette → colors → auto
 // template → render), so Drive-sourced art behaves identically everywhere.
@@ -5843,21 +5897,7 @@ async function selectDriveFile(file) {
   els.driveStatus.style.display = '';
   els.driveStatus.textContent = `${file.name} を読み込み中…`;
   try {
-    const res = await googleApiFetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`);
-    const blob = await res.blob();
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-    const img = new Image();
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-      img.src = dataUrl;
-    });
-    state.artImage = img;
+    state.artImage = await fetchDriveFileAsImage(file);
     refreshPaletteFromSource();
     render();
     els.driveStatus.textContent = `${file.name} を読み込みました。`;
@@ -5867,6 +5907,97 @@ async function selectDriveFile(file) {
     els.driveStatus.textContent = `読み込みに失敗しました: ${err.message}`;
   }
 }
+
+// ---------- Drive multi-select batch export (同じ構図・コピーのまま画像だけ差し替え) ----------
+// Reuses the exact same template/copy/adjustments currently configured —
+// only state.artImage (and the palette derived from it) changes per file.
+// Auto-template-select is force-disabled for the duration so every export
+// in the batch keeps the same layout ("同じ訴求、構図でバナーを作りたい"),
+// even if a differently-toned image would otherwise have picked a
+// different template.
+async function runDriveMultiExport() {
+  const files = getSelectedDriveFiles();
+  if (!files.length) return;
+
+  const prevArtImage = state.artImage;
+  const prevBg = state.colors.bg, prevAccent = state.colors.accent, prevAccentRaw = state.colors.accentRaw;
+  const prevAutoTemplate = els.autoTemplateCheckbox.checked;
+  els.autoTemplateCheckbox.checked = false;
+
+  els.driveMultiExportBtn.disabled = true;
+  els.driveMultiExportStatus.style.display = '';
+  els.driveMultiExportStatus.classList.remove('error');
+
+  const hasZip = typeof JSZip !== 'undefined';
+  const zip = hasZip ? new JSZip() : null;
+  const usedNames = new Set();
+  let done = 0;
+
+  try {
+    for (const file of files) {
+      els.driveMultiExportStatus.textContent = `${file.name} を書き出し中… (${done}/${files.length})`;
+      const img = await fetchDriveFileAsImage(file);
+      state.artImage = img;
+      const source = (state.useKvPalette && state.kvImage) ? state.kvImage : img;
+      const palette = extractPalette(source);
+      state.colors.bg = palette.bg;
+      state.colors.accent = palette.accent;
+      state.colors.accentRaw = palette.accentRaw;
+      syncColorPickers();
+      render();
+      await new Promise(r => requestAnimationFrame(r));
+
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const baseName = sanitizeFilename(file.name.replace(/\.[^.]+$/, '')) || `image${done}`;
+      let filename = `${baseName}.png`;
+      let n = 2;
+      while (usedNames.has(filename)) { filename = `${baseName}_${n++}.png`; }
+      usedNames.add(filename);
+
+      if (zip) {
+        zip.file(filename, blob);
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        await new Promise(r => setTimeout(r, 350));
+      }
+
+      done++;
+      els.driveMultiExportStatus.textContent = `${done}/${files.length} 完了`;
+    }
+
+    if (zip) {
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      a.href = url;
+      a.download = `gaaat-banners_${stamp}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    els.driveMultiExportStatus.textContent = `${done}件のバナーを書き出しました。`;
+  } catch (err) {
+    console.error(err);
+    els.driveMultiExportStatus.classList.add('error');
+    els.driveMultiExportStatus.textContent = `書き出しに失敗しました: ${err.message}`;
+  } finally {
+    state.artImage = prevArtImage;
+    state.colors.bg = prevBg;
+    state.colors.accent = prevAccent;
+    state.colors.accentRaw = prevAccentRaw;
+    syncColorPickers();
+    els.autoTemplateCheckbox.checked = prevAutoTemplate;
+    render();
+    els.driveMultiExportBtn.disabled = false;
+  }
+}
+
+els.driveMultiExportBtn.addEventListener('click', runDriveMultiExport);
 
 // ---------- Google Sheets import (案件マスタの自動取得) ----------
 // Reuses the same Google login as the Drive art picker above (one token,
