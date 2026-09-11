@@ -3089,6 +3089,25 @@ function renderVerticalTitleTemplate() {
   // ---- Bottom ribbon band with CTA ----
   const bandH = 130;
   const bandTop = W - bandH;
+  // The artwork is full-bleed behind this whole template, so whatever sits
+  // near the bottom of a given piece of art (a picture frame's own edge, a
+  // signature, a prop) previously ended right where the band's fully-opaque
+  // fill began — a hard seam that read as the band cutting the art off
+  // mid-frame rather than a deliberate design choice
+  // ("素材と背景が被ってる…素材に被んないように調整してもらうことは可能？").
+  // A short fade from transparent to the band's own color, drawn just above
+  // it, lets the art visually recede into the band instead — same
+  // decorate-around-it approach as the right/left/top scrims above, not a
+  // pixel edit to the art itself.
+  const bandFadeH = 90;
+  const bandFade = ctx.createLinearGradient(0, bandTop - bandFadeH, 0, bandTop);
+  // Both stops share the accent's own RGB, varying only alpha — fading
+  // through transparent BLACK instead would mix in a muddy dark band partway
+  // through, since alpha and hue would be interpolating at once.
+  bandFade.addColorStop(0, `rgba(${accent.r}, ${accent.g}, ${accent.b}, 0)`);
+  bandFade.addColorStop(1, `rgba(${accent.r}, ${accent.g}, ${accent.b}, 1)`);
+  ctx.fillStyle = bandFade;
+  ctx.fillRect(0, bandTop - bandFadeH, W, bandFadeH);
   ctx.fillStyle = accentHex;
   ctx.fillRect(0, bandTop, W, bandH);
 
