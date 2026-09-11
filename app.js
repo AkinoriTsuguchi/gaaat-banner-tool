@@ -422,6 +422,16 @@ const state = {
   // auto-set true on upload, auto-set false when the image is removed.
   kvImage: null,
   useKvPalette: false,
+  // Some uploaded art files bake in a lot of uniform padding around the
+  // actual subject (a framed-print mockup shot on a big plain backdrop,
+  // say) — cover-fitting the raw file then wastes canvas space on that
+  // padding and makes where the "real" picture lands unpredictable from
+  // one file to the next (relevant for batch export, where each file may
+  // have a different amount). When on (default), computeCoverRect() crops
+  // to the auto-detected content bounding box first; harmless no-op for
+  // ordinary already-tightly-cropped art (see detectContentBBox's margin
+  // threshold).
+  artAutoCrop: true,
   colors: {
     bg: { r: 245, g: 243, b: 238 },
     accent: { r: 226, g: 87, b: 76 },
@@ -645,6 +655,7 @@ const ctx = new Proxy({}, {
 const els = {
   artFile: document.getElementById('artFile'),
   artUploadZone: document.getElementById('artUploadZone'),
+  artAutoCropToggle: document.getElementById('artAutoCropToggle'),
   lineupUploadWrap: document.getElementById('lineupUploadWrap'),
   lineupFile: document.getElementById('lineupFile'),
   lineupUploadZone: document.getElementById('lineupUploadZone'),
@@ -1325,6 +1336,85 @@ function wrapText(text, maxWidth, font) {
   return lines;
 }
 
+// Detects the tight bounding box of "real" content within an image,
+// distinguishing it from uniform padding/backdrop some source files bake in
+// around the actual subject (e.g. a framed-print mockup shot on a big plain
+// background). Samples the four corners to guess the backdrop color, then
+// scans inward from each edge for the first row/column that departs from it
+// by more than a threshold. Returns null — meaning "use the whole image,
+// unchanged" — whenever the margin isn't substantial, so this is a no-op for
+// the common case of already-tightly-cropped art.
+function detectContentBBox(img) {
+  const maxDim = 200;
+  const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const off = document.createElement('canvas');
+  off.width = w; off.height = h;
+  const octx = off.getContext('2d');
+  octx.drawImage(img, 0, 0, w, h);
+  const data = octx.getImageData(0, 0, w, h).data;
+
+  const at = (x, y) => {
+    const i = (y * w + x) * 4;
+    return { r: data[i], g: data[i + 1], b: data[i + 2], a: data[i + 3] };
+  };
+  const corners = [at(0, 0), at(w - 1, 0), at(0, h - 1), at(w - 1, h - 1)];
+  const bg = {
+    r: corners.reduce((s, c) => s + c.r, 0) / 4,
+    g: corners.reduce((s, c) => s + c.g, 0) / 4,
+    b: corners.reduce((s, c) => s + c.b, 0) / 4
+  };
+  const THRESHOLD = 26;
+  const rowHasContent = y => {
+    for (let x = 0; x < w; x++) {
+      const p = at(x, y);
+      if (p.a >= 200 && colorDistance(p, bg) > THRESHOLD) return true;
+    }
+    return false;
+  };
+  const colHasContent = x => {
+    for (let y = 0; y < h; y++) {
+      const p = at(x, y);
+      if (p.a >= 200 && colorDistance(p, bg) > THRESHOLD) return true;
+    }
+    return false;
+  };
+
+  let top = 0, bottom = h - 1, left = 0, right = w - 1;
+  while (top < bottom && !rowHasContent(top)) top++;
+  while (bottom > top && !rowHasContent(bottom)) bottom--;
+  while (left < right && !colHasContent(left)) left++;
+  while (right > left && !colHasContent(right)) right--;
+
+  const marginFrac = 1 - ((right - left) * (bottom - top)) / (w * h);
+  // Only worth trimming when there's a clear, substantial margin — otherwise
+  // this would start second-guessing ordinary photos whose edges just
+  // happen to be a bit uniform (sky, a plain wall).
+  if (marginFrac < 0.15) return null;
+
+  // Pad back out a little so the crop doesn't land flush against the
+  // subject's own edge (a picture frame's outer edge would look
+  // uncomfortably tight otherwise).
+  const pad = Math.round(Math.min(w, h) * 0.03);
+  const bx = Math.max(0, left - pad), by = Math.max(0, top - pad);
+  const bw = Math.min(w, right + pad) - bx, bh = Math.min(h, bottom + pad) - by;
+
+  const inv = 1 / scale;
+  return { x: bx * inv, y: by * inv, w: bw * inv, h: bh * inv };
+}
+
+// Cached on the image element itself — detectContentBBox is only worth
+// running once per uploaded file, not on every render() call (which fires
+// on every keystroke).
+function getArtContentBBox(img) {
+  if (!img._contentBBoxComputed) {
+    img._contentBBox = detectContentBBox(img);
+    img._contentBBoxComputed = true;
+  }
+  return img._contentBBox;
+}
+
 // zoom/panX/panY implement the 素材のトリミング・位置 (art crop/position)
 // adjustment knob — zoom > 1 crops in tighter (shows less of the source,
 // magnified); panX/panY are in *destination* px (same units as every other
@@ -1332,19 +1422,25 @@ function wrapText(text, maxWidth, font) {
 // same output rect, positive = image content shifts right/down. Clamped so
 // the crop window can never go outside the source image.
 function computeCoverRect(img, w, h, zoom = 1, panX = 0, panY = 0) {
-  const ir = img.naturalWidth / img.naturalHeight;
+  // Starts from the auto-detected content box (state.artAutoCrop, default
+  // on) instead of the raw file dimensions when the source has substantial
+  // built-in padding — see detectContentBBox. Manual pan/zoom below still
+  // range over the full original image, so a user can zoom back out into
+  // the trimmed margin if they actually want it.
+  const bbox = (state.artAutoCrop && getArtContentBBox(img)) || { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
+  const ir = bbox.w / bbox.h;
   const br = w / h;
   let sx, sy, sw, sh;
   if (ir > br) {
-    sh = img.naturalHeight;
+    sh = bbox.h;
     sw = sh * br;
-    sx = (img.naturalWidth - sw) / 2;
-    sy = 0;
+    sx = bbox.x + (bbox.w - sw) / 2;
+    sy = bbox.y;
   } else {
-    sw = img.naturalWidth;
+    sw = bbox.w;
     sh = sw / br;
-    sx = 0;
-    sy = (img.naturalHeight - sh) / 2;
+    sx = bbox.x;
+    sy = bbox.y + (bbox.h - sh) / 2;
   }
   if (zoom !== 1) {
     const z = Math.max(0.1, zoom);
@@ -3565,6 +3661,10 @@ function handleArtFile(file) {
   reader.readAsDataURL(file);
 }
 els.artFile.addEventListener('change', e => handleArtFile(e.target.files[0]));
+els.artAutoCropToggle.addEventListener('change', () => {
+  state.artAutoCrop = els.artAutoCropToggle.checked;
+  render();
+});
 
 // KV screenshot is palette-only — never composited into the banner, so it
 // gets its own upload input separate from artFile/lineupFile. Shared by the

@@ -577,6 +577,18 @@
     opacity:.45;
     cursor:default;
   }
+  .auto-crop-toggle{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:12px;
+    color:var(--text);
+    cursor:pointer;
+    margin-top:8px;
+  }
+  .auto-crop-toggle input{
+    cursor:pointer;
+  }
   .drive-review-toggle{
     display:flex;
     align-items:flex-start;
@@ -1083,6 +1095,11 @@
         <p class="paste-hint">クリックしてCtrl+V（Macはcmd+V）で画像を貼り付けることもできます</p>
         <p class="hint">アップロードした画像はリサイズ・トリミング（配置調整）のみ行い、色調補正・加工は一切行いません。</p>
       </div>
+      <label class="auto-crop-toggle">
+        <input type="checkbox" id="artAutoCropToggle" checked>
+        素材の余白を自動トリミング（推奨）
+      </label>
+      <p class="hint">額装写真など、絵柄の周りに大きな余白がある素材でも、絵柄部分を自動検出してその範囲を基準に配置します。四隅の色が十分均一でない素材では何もしません（誤検出防止）。位置・拡大率は下の「レイアウト微調整」の「素材」欄でいつでも手動調整できます。</p>
 
       <div id="lineupUploadWrap" style="display:none;">
         <label style="margin-top:16px;">⑥キャラクターラインナップ用素材（複数アップロード・最大6枚）</label>
@@ -1527,6 +1544,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="app.js?v=115"></script>
+<script src="app.js?v=116"></script>
 </body>
 </html>
