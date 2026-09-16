@@ -103,6 +103,12 @@
   .howto ol b{color:var(--text);}
   .howto code{background:var(--panel-bg2);padding:1px 5px;border-radius:4px;color:var(--text);font-size:11.5px;}
   .howto .hint{margin:12px 0 0;}
+  .howto .cmd{
+    background:#121418;border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:4px;padding:10px 12px;margin:10px 0;overflow-x:auto;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+    color:var(--text);white-space:pre;
+  }
   .howto .dl{
     display:inline-block;margin-top:14px;padding:9px 16px;
     background:var(--accent);color:#fff;border-radius:6px;
@@ -276,8 +282,20 @@
       </ol>
       <p class="hint">
         手順1で「① Illustratorに渡す」を押していれば、<b>フォルダを選ぶ画面は出ません</b>
-        （「このフォルダでいいですか」と聞かれるので「はい」を押すだけ）。<br>
-        毎回「その他のスクリプト...」を辿るのが面倒なら、<code>preflight.jsx</code> を
+        （「このフォルダでいいですか」と聞かれるので「はい」を押すだけ）。
+      </p>
+      <p class="hint">
+        <b>毎回ファイルを探すのが面倒なら、1回だけ登録しておけます。</b>
+        ターミナルで次の1行を実行すると（Macのパスワードを聞かれます）、
+        Illustrator の <b>ファイル → スクリプト → GAAAT入稿チェック</b> に直接出るようになります。
+        常に最新版を取りに行くので、古い版が残る心配もありません。
+      </p>
+      <pre class="cmd">curl -fsSL https://akinoritsuguchi.github.io/gaaat-banner-tool/check/install-mac.sh | sudo bash</pre>
+      <p class="hint">
+        パスワードは<b>打っても画面に何も出ません</b>（それで正常です）。
+        日本語入力になっていると打てないので、「英数」キーを押してから入力してください。
+        実行後は Illustrator を再起動します。<br>
+        この登録をしない場合は、<code>preflight.jsx</code> を
         Illustrator の「スクリプト」フォルダに入れておくと、<b>ファイル → スクリプト</b> の
         直下に出るようになります。スクリプトはファイルを保存せずに閉じるので、
         入稿データが書き換わることはありません。
@@ -367,6 +385,6 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="../shared/google.js?v=6"></script>
 <script src="../shared/master-sheet.js?v=6"></script>
-<script src="app.js?v=11"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>
