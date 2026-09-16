@@ -251,13 +251,14 @@
       <option value="verticalJa">C 和文縦組み型（サイボーグ009）</option>
       <option value="condensed">E 大型コンデンス型（ZEENCHIN）</option>
       <option value="lockup">F ロゴロックアップ型（ウルトラマン）</option>
+      <option value="banner">G ロゴ＋帯型（PEANUTS）</option>
     </select>
     <label class="check"><input type="checkbox" id="coverAuto" checked><span>表紙画像の配色からレイアウトを自動選択する</span></label>
     <p class="hint">過去のリーフレット表紙から起こした4パターンです。プルダウンを手で変えると自動選択はオフになります。Fは作品画像を使わず、版元支給のIPロゴとGAAATロゴを「×」で組みます（画像が使えずロゴのみ支給の案件用）。<strong>額縁やフレームなどの装飾はツール側では一切描きません</strong>（支給素材にすでに額が写っている場合に二重になるため）。</p>
     <p class="hint"><strong>画像は「デザインのみ」のデータをご用意ください。</strong>額装が写り込んだものや、まわりに余白が入ったもの（物撮りなど）は避けてください。ツール側では作品を一切トリミングしないので、余白はそのまま版面の余白になり、額付きの素材は誌面の枠と二重になります。TIFでもそのまま読み込めます。</p>
     <label>IPロゴ（Fロゴロックアップ型で使用）</label>
     <input type="file" id="ipLogoInput" accept="image/*">
-    <label class="check"><input type="checkbox" id="coverDark"><span>表紙を暗い配色にする（背景画像に文字を重ねる場合はこちら）</span></label>
+    <p class="hint">Gは作品画像を使わず、白地にGAAATロゴとタイトルだけを置く型です（PEANUTSのリーフレットと同じ構成）。右端の帯は下の「アクセント」で色を変えられます。</p>
   </fieldset>
 
   <fieldset>
@@ -383,6 +384,6 @@
 <script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="logo.js"></script>
-<script src="app.js?v=21"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>

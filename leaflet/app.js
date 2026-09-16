@@ -103,7 +103,7 @@ const els = {
 
   coverTitle: $('coverTitle'), coverSubtitle: $('coverSubtitle'),
   copyright: $('copyright'),
-  coverImageInput: $('coverImageInput'), coverDark: $('coverDark'),
+  coverImageInput: $('coverImageInput'),
   coverTemplate: $('coverTemplate'), coverAuto: $('coverAuto'), ipLogoInput: $('ipLogoInput'),
 
   boilerplatePreview: $('boilerplatePreview'), footNote: $('footNote'),
@@ -1634,11 +1634,75 @@ function drawCoverLogoLockup(ctx, g, r, ins, w, c, dark) {
   drawCoverCopyright(ctx, g, cx, g.oy + g.mm(SHEET_H_MM) - g.mm(14), fg, 'center');
 }
 
+// G：ロゴ＋帯型（PEANUTS）。作品画像を使わず、白地にGAAATロゴとタイトルだけを置き、
+// 右端に色帯を通す。版元のキービジュアルが使えない案件や、LIST主体の配布物向け。
+// タイトルは1行目を字間を空けた大見出し、2行目以降を黒地白抜きの帯として組む
+// （「PEANUTS / Metal Canvas Art / List of Works」の並びがこの形）。
+function drawCoverBanner(ctx, g, r, ins, w, c, dark) {
+  const fg = dark ? '#ffffff' : c.text;
+  ctx.fillStyle = coverBgColor(c, dark);
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+
+  // 右端の帯は塗り足しまで通す（天地とも断ち切り）
+  const bandW = g.mm(11);
+  ctx.fillStyle = c.accent;
+  ctx.fillRect(r.x + r.w - bandW, r.y, bandW, r.h);
+
+  const areaW = w - bandW - g.mm(3);
+  const cx = ins.left + areaW / 2;
+
+  const lines = coverTitleLines();
+  const headSize = g.mm(6.4);
+  const barSize = g.mm(4.2);
+  const barH = barSize * 1.75;
+  const barGap = g.mm(1.6);
+  const subCount = Math.max(0, lines.length - 1);
+
+  // ロゴとタイトルをひとまとまりとして、面の上半分に置く。
+  const logoW = Math.min(areaW * 0.82, g.mm(52));
+  const logoH = state.logo ? logoW * (state.logo.height / state.logo.width) : 0;
+  const blockH = logoH + g.mm(16) + (lines.length ? headSize : 0) +
+    (subCount ? g.mm(3) + subCount * barH + (subCount - 1) * barGap : 0);
+  // QRを廃したぶん下が空くので、塊はやや上・ほぼ天地中央に置く。
+  let y = g.oy + Math.max(g.mm(20), (g.mm(SHEET_H_MM) - blockH) * 0.44);
+
+  if (state.logo) {
+    drawContained(ctx, state.logo, cx - logoW / 2, y, logoW, logoH);
+    y += logoH + g.mm(16);
+  }
+
+  if (lines.length) {
+    ctx.fillStyle = fg;
+    ctx.font = `700 ${headSize}px ${FONT_EN}`;
+    ctx.textAlign = 'center';
+    drawTrackedText(ctx, lines[0], cx, y + headSize, g.mm(2.2));
+    ctx.textAlign = 'left';
+    y += headSize + g.mm(3);
+  }
+
+  // 2行目以降は黒地に白抜き。帯の幅は文字幅に合わせて1行ずつ決める。
+  lines.slice(1).forEach(line => {
+    ctx.font = `700 ${barSize}px ${FONT_JP}`;
+    const tw = ctx.measureText(line).width;
+    const bw = Math.min(areaW, tw + g.mm(7));
+    ctx.fillStyle = fg;
+    ctx.fillRect(cx - bw / 2, y, bw, barH);
+    ctx.fillStyle = dark ? '#101114' : '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.fillText(line, cx, y + barH / 2 + barSize * 0.36);
+    ctx.textAlign = 'left';
+    y += barH + barGap;
+  });
+
+  drawCoverCopyright(ctx, g, cx, g.oy + g.mm(SHEET_H_MM) - g.mm(12), fg, 'center');
+}
+
 const COVER_RENDERERS = {
   hero: drawCoverHero,
   verticalJa: drawCoverVerticalJa,
   condensed: drawCoverCondensed,
-  lockup: drawCoverLogoLockup
+  lockup: drawCoverLogoLockup,
+  banner: drawCoverBanner
 };
 
 function samplePalette(img) {
@@ -1690,7 +1754,7 @@ function drawCoverPanel(ctx, g, rect, c, rects) {
   ctx.beginPath();
   ctx.rect(r.x, r.y, r.w, r.h);
   ctx.clip();
-  draw(ctx, g, r, ins, w, c, els.coverDark.checked);
+  draw(ctx, g, r, ins, w, c, false);
   ctx.restore();
 }
 
