@@ -55,21 +55,33 @@
   // 列の位置ではなく見出しの文字で価格列を探す（既存3ツールと同じ作法）。
   // ここで作るのは「載っていてよい金額」の許容集合なので、多少余分に拾っても
   // 実害は小さい。逆に取りこぼすと正しい金額をNGにしてしまうため、広めに取る。
+  // 価格だけでなく「どの作品の価格か」も持つ。金額が合わないとき、作品名まで
+  // 言えないと誌面のどこを直せばいいのか分からないため。
   function buildPriceSet(text) {
     const rows = String(text || '').split(/\r?\n/).map(l => l.split('\t'));
     const priceCols = new Set();
     const values = new Set();
+    const byPrice = new Map();   // 価格 → [作品の呼び名]
+    let nameCol = -1;
+    let codeCol = -1;
     let headerSeen = false;
 
     rows.forEach(cells => {
-      // 見出し行を見つけるたびに価格列を足す。1タブに表が複数あっても通る。
+      // 見出し行を見つけるたびに列の対応を取り直す。1タブに表が複数あっても通る。
       let isHeaderRow = false;
       cells.forEach((cell, idx) => {
         const h = String(cell || '').replace(/[\s　]/g, '');
         if (/価格|金額|price/i.test(h)) { priceCols.add(idx); isHeaderRow = true; }
+        if (/^(作品名|商品名|作品タイトル)/.test(h)) nameCol = idx;
+        if (/^(作品番号|作品ナンバー|ハンドル名|no\.?|番号)$/i.test(h)) codeCol = idx;
       });
       if (isHeaderRow) { headerSeen = true; return; }
       if (!headerSeen) return;
+
+      const code = codeCol >= 0 ? cleanCellText(cells[codeCol]) : '';
+      const name = nameCol >= 0 ? cleanCellText(cells[nameCol]) : '';
+      const label = [code, name].filter(Boolean).join(' ') || '';
+
       priceCols.forEach(idx => {
         const cell = cells[idx];
         if (cell === undefined) return;
@@ -77,10 +89,21 @@
         const cleaned = toHalfWidth(cell).replace(/[¥,\s　円-]/g, '');
         if (!/^[0-9]+$/.test(cleaned)) return;
         const n = normalizeMoney(cell);
-        if (n !== null && n > 0) values.add(n);
+        if (n === null || n <= 0) return;
+        values.add(n);
+        if (label) {
+          const list = byPrice.get(n) || [];
+          if (list.indexOf(label) === -1) list.push(label);
+          byPrice.set(n, list);
+        }
       });
     });
+    values.byPrice = byPrice;
     return values;
+  }
+
+  function cleanCellText(v) {
+    return String(v == null ? '' : v).replace(/[\s　]+/g, ' ').trim();
   }
 
   function parseExtraPrices(input) {
@@ -94,16 +117,25 @@
 
   /* ---------------- 誌面から金額を拾う ---------------- */
 
+  // 誌面のテキストは「#2 / 650 mm×650 mm / ¥ 181,500（税込）」のように
+  // 作品番号と同じテキストフレームに入っていることが多い。拾えたら控えておく。
+  const CODE_RE = /#\s*([0-9]{1,3})/;
+
   function extractMoneyFromTexts(texts) {
     const found = [];
     (texts || []).forEach(t => {
       const line = String(t);
+      const codeHit = line.match(CODE_RE);
+      const code = codeHit ? '#' + codeHit[1] : '';
       let m;
       MONEY_RE.lastIndex = 0;
       while ((m = MONEY_RE.exec(line)) !== null) {
         const value = normalizeMoney(m[0]);
         if (value === null || value <= 0) continue;
-        found.push({ raw: m[0], value, context: line.length > 60 ? line.slice(0, 60) + '…' : line });
+        found.push({
+          raw: m[0], value, code,
+          context: line.length > 60 ? line.slice(0, 60) + '…' : line
+        });
       }
     });
     return found;
@@ -264,6 +296,24 @@
 
   /* ---------------- 判定 ---------------- */
 
+  // 実測値が標準判型なら名前を言う。「420×297mm」とだけ出されても、それが
+  // A3なのか変形なのか分からないと、期待値の選び間違いなのか不備なのか判断できない。
+  const PAPER_SIZES = [
+    ['A1', 594, 841], ['A2', 420, 594], ['A3', 297, 420], ['A4', 210, 297],
+    ['A5', 148, 210], ['A6', 105, 148],
+    ['B1', 728, 1030], ['B2', 515, 728], ['B3', 364, 515], ['B4', 257, 364],
+    ['B5', 182, 257], ['B6', 128, 182],
+    ['ハガキ', 100, 148], ['名刺', 55, 91]
+  ];
+
+  function paperName(w, h) {
+    for (const [name, pw, ph] of PAPER_SIZES) {
+      if (Math.abs(w - pw) <= 1 && Math.abs(h - ph) <= 1) return name + '縦';
+      if (Math.abs(w - ph) <= 1 && Math.abs(h - pw) <= 1) return name + '横';
+    }
+    return null;
+  }
+
   function sizeMatches(w, h, ew, eh, tol, allowRotate) {
     const fits = (a, b, ea, eb) => Math.abs(a - ea) <= tol && Math.abs(b - eb) <= tol;
     if (fits(w, h, ew, eh)) return true;
@@ -370,13 +420,16 @@
     const sizeLines = [];
     let sizeNg = false;
     const sizeNotes = [];
+    const actualPapers = new Set();
     both.forEach(({ label, f }) => {
       (f.artboards || []).forEach(ab => {
         const ok = skipSize || sizeMatches(ab.widthMm, ab.heightMm, opts.ew, opts.eh, opts.tol, opts.allowRotate);
         if (!ok) sizeNg = true;
+        const paper = paperName(ab.widthMm, ab.heightMm);
         sizeLines.push(
           (skipSize ? '・ ' : (ok ? '○ ' : '× ')) + label + ' アートボード' + (ab.index + 1) +
-          '（' + (ab.name || '名前なし') + '）: ' + ab.widthMm + ' × ' + ab.heightMm + ' mm');
+          ': ' + ab.widthMm + ' × ' + ab.heightMm + ' mm' + (paper ? '（' + paper + '）' : ''));
+        if (!ok && paper) actualPapers.add(paper);
         if (!ok) {
           // アートボードを「仕上がり」ではなく「塗り足し＋トンボ込み」で作っている案件がある。
           // その場合ここは必ずNGになるので、寸法差から可能性を言っておく。
@@ -389,6 +442,12 @@
         }
       });
     });
+    // 全部が同じ標準判型なら、期待値の選び間違いの可能性が高い。そう言う。
+    if (sizeNg && actualPapers.size === 1) {
+      const only = Array.from(actualPapers)[0];
+      sizeNotes.unshift('実測はすべて ' + only + ' です。この案件が ' + only.replace(/[縦横]$/, '') +
+        ' なら、手順2の仕上がりサイズを ' + only.replace(/[縦横]$/, '') + ' に変えてください。');
+    }
     checks.push({
       status: (sizeLines.length === 0 || skipSize) ? 'info' : (sizeNg ? 'ng' : 'ok'),
       title: '仕上がりサイズ',
@@ -421,12 +480,18 @@
         bleedLines.push('（参考）' + label + ' にトンボらしき名前のレイヤーがあります。');
       }
     });
+    // 地色が紙端まで届かないデザイン（白フチ）なら塗り足しは不要で、0mm が正しい。
+    // ツールからは「必要かどうか」を判定できないので、NG ではなく要確認にする。
     checks.push({
-      status: bleedLines.length === 0 ? 'info' : (bleedNg ? 'ng' : 'ok'),
+      status: bleedLines.length === 0 ? 'info' : (bleedNg ? 'warn' : 'ok'),
       title: '塗り足し・トンボ',
       detail: (bleedLines.length === 0 && fromDrive)
-        ? 'Illustrator でスクリプトを実行すると判定できます（手順2）。'
-        : 'アートボードの外にオブジェクトがどれだけ出ているかの実測値。' + opts.bleed + 'mm 以上あれば塗り足しありとみなします。',
+        ? 'Illustrator でスクリプトを実行すると判定できます（手順4）。'
+        : bleedNg
+          ? 'アートボードの外にオブジェクトが ' + opts.bleed + 'mm 以上出ていない面があります。' +
+            '地色が紙端まで届かないデザイン（白フチ）なら、塗り足しは不要なのでこれで正常です。' +
+            'フチなしで刷る面がある場合だけ確認してください。'
+          : 'アートボードの外にオブジェクトがどれだけ出ているかの実測値。' + opts.bleed + 'mm 以上あれば塗り足しありとみなします。',
       lines: bleedLines.length
         ? bleedLines.concat(['トンボそのものの位置・線幅までは判定していません。数値が極端に大きい場合はトンボ込みです。'])
         : []
@@ -455,10 +520,17 @@
           detail: '[ol前] の中に金額らしき文字列が1つも見つかりませんでした。誌面に金額が載る案件なら、テキストが既にアウトライン化されている可能性があります。'
         });
       } else if (bad.length === 0) {
+        const names = (state.priceSet && state.priceSet.byPrice) || new Map();
         checks.push({
           status: 'ok', title: '金額',
           detail: '誌面に出てくる金額 ' + seenOk.size + ' 種類は、すべて ' + state.priceSource + ' の価格と一致しました。',
-          lines: Array.from(seenOk).sort((a, b) => a - b).map(formatYen)
+          lines: Array.from(seenOk).sort((a, b) => a - b).map(v => {
+            const owners = names.get(v) || [];
+            return formatYen(v) + (owners.length
+              ? '（' + owners.slice(0, 3).join(' / ') +
+                (owners.length > 3 ? ' ほか' + (owners.length - 3) + '件' : '') + '）'
+              : '');
+          })
         });
       } else {
         const uniq = new Map();
@@ -469,18 +541,43 @@
         // 「¥181,500 ← 「¥181,500（税込）」」のように同じ数字を2回出しても
         // 何が問題か分からない。シート側で一番近い価格と差額を出して、
         // 打ち間違いなのか、そもそもシートが違うのかを判断できるようにする。
-        const lines = Array.from(uniq.values())
+        // どの作品の金額かを言う。誌面側は作品番号（#2 など）を同じテキストから
+        // 拾い、シート側は価格に紐づく作品名を出す。金額だけ出されても、誌面の
+        // どこを直せばいいのか分からないため。
+        const byValue = new Map();
+        bad.forEach(b => {
+          const codes = byValue.get(b.value) || [];
+          if (b.code && codes.indexOf(b.code) === -1) codes.push(b.code);
+          byValue.set(b.value, codes);
+        });
+        const sheetNames = (state.priceSet && state.priceSet.byPrice) || new Map();
+
+        const lines = [];
+        Array.from(uniq.values())
           .sort((a, b) => a.value - b.value)
-          .map(b => {
+          .forEach(b => {
+            const codes = (byValue.get(b.value) || []).sort((x, y) =>
+              Number(x.slice(1)) - Number(y.slice(1)));
+            const who = codes.length
+              ? '作品 ' + codes.join(' / ')
+              : '（作品番号を読み取れず）';
+            lines.push(who + ' の ' + formatYen(b.value) + ' がシートにありません');
+
             let near = null;
             allow.forEach(v => {
               if (near === null || Math.abs(v - b.value) < Math.abs(near - b.value)) near = v;
             });
-            if (near === null) return '誌面 ' + formatYen(b.value) + ' … シートに価格がありません';
+            if (near === null) {
+              lines.push('　　シート側に価格が1件もありません');
+              return;
+            }
             const diff = b.value - near;
             const sign = diff > 0 ? '+' : '−';
-            return '誌面 ' + formatYen(b.value) + ' … シートに無し（最も近い価格 ' +
-              formatYen(near) + ' / 差 ' + sign + Math.abs(diff).toLocaleString('ja-JP') + '円）';
+            const owners = sheetNames.get(near) || [];
+            lines.push('　　シートで最も近い価格: ' + formatYen(near) +
+              '（差 ' + sign + Math.abs(diff).toLocaleString('ja-JP') + '円）' +
+              (owners.length ? ' ← ' + owners.slice(0, 3).join(' / ') +
+                (owners.length > 3 ? ' ほか' + (owners.length - 3) + '件' : '') : ''));
           });
 
         lines.push('― 照合先: ' + state.priceSource + '（価格 ' + allow.length + ' 種類）');
