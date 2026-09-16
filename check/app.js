@@ -828,48 +828,151 @@
 
   // Illustrator のフォルダ選択でどこを辿ればいいかを出す。
   // ここが分からないのが「面倒くささ」の実体なので、経路をそのまま見せる。
+  // 画面に出すのは「いま押すもの」だけにする。経路・パス・予備手段は畳む。
+  // 手順を全部並べると、どれが自分に関係あるのか分からなくなるため。
   function renderFolderInfo(path, files, ai, localPath) {
     const box = els.folderInfo;
     box.textContent = '';
 
+    /* 見出し: どの案件を見ているか */
     const h = document.createElement('h4');
-    h.textContent = 'Illustrator のフォルダ選択では、ここを辿ってください';
+    h.textContent = path[path.length - 1] || 'このフォルダ';
     box.appendChild(h);
 
-    const crumb = document.createElement('div');
-    crumb.className = 'crumb';
-    crumb.appendChild(document.createTextNode('マイドライブ / '));
-    path.forEach((name, i) => {
-      if (i === path.length - 1) {
-        const b = document.createElement('b');
-        b.textContent = name;
-        crumb.appendChild(b);
-      } else {
-        crumb.appendChild(document.createTextNode(name + ' / '));
-      }
-    });
-    box.appendChild(crumb);
+    const sub = document.createElement('p');
+    sub.className = 'sub';
+    sub.textContent = ai.length
+      ? ai.map(f => {
+          const mb = Math.round(Number(f.size || 0) / 1048576);
+          return f.name.replace(/R\d+.*$/, '').trim() + (mb ? ' ' + mb + 'MB' : '');
+        }).join(' ／ ')
+      : 'このフォルダの直下に .ai がありません。';
+    box.appendChild(sub);
 
-    const ul = document.createElement('ul');
-    ai.forEach(f => {
-      const li = document.createElement('li');
-      const mb = Math.round(Number(f.size || 0) / 1048576);
-      li.textContent = f.name + (mb ? '（' + mb + ' MB）' : '');
-      ul.appendChild(li);
-    });
-    if (!ai.length) {
-      const li = document.createElement('li');
-      li.textContent = 'このフォルダの直下に .ai がありません。';
-      ul.appendChild(li);
+    /* 手順は3つだけ。ボタンはその手順の中に置く */
+    const steps = document.createElement('div');
+    steps.className = 'steps';
+
+    function addStep(n, where, build) {
+      const row = document.createElement('div');
+      row.className = 'step';
+      const num = document.createElement('span');
+      num.className = 'n';
+      num.textContent = n;
+      const body = document.createElement('div');
+      body.className = 'body';
+      const w = document.createElement('p');
+      w.className = 'w';
+      w.textContent = where;
+      body.appendChild(w);
+      build(body);
+      row.appendChild(num);
+      row.appendChild(body);
+      steps.appendChild(row);
     }
-    box.appendChild(ul);
 
+    let jobBtn, pullBtn;
+
+    addStep('1', 'このページで', body => {
+      jobBtn = document.createElement('button');
+      jobBtn.className = 'act primary';
+      jobBtn.textContent = 'Illustratorに渡す';
+      jobBtn.disabled = !localPath;
+      jobBtn.addEventListener('click', () => {
+        const job = { folderPath: localPath, folderName: path[path.length - 1] || '',
+                      createdAt: new Date().toISOString() };
+        const blob = new Blob([JSON.stringify(job, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'gaaat-check-job.json';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        jobBtn.textContent = '渡しました';
+        setTimeout(() => { jobBtn.textContent = 'Illustratorに渡す'; }, 2500);
+      });
+      body.appendChild(jobBtn);
+    });
+
+    addStep('2', 'Illustrator で', body => {
+      const menu = document.createElement('p');
+      menu.className = 'menu';
+      menu.textContent = 'ファイル → スクリプト → GAAAT入稿チェック';
+      body.appendChild(menu);
+      const say = document.createElement('p');
+      say.className = 'say';
+      say.textContent = '「' + (path[path.length - 1] || 'このフォルダ') +
+        ' をチェックしますか？」と出るので「はい」。あとは数分待つだけ。';
+      body.appendChild(say);
+    });
+
+    addStep('3', 'このページに戻って', body => {
+      pullBtn = document.createElement('button');
+      pullBtn.className = 'act';
+      pullBtn.textContent = '結果を取り込む';
+      pullBtn.addEventListener('click', async () => {
+        pullBtn.disabled = true;
+        pullBtn.textContent = '探しています…';
+        try {
+          const found = await fetchResultJson(state.folderId);
+          if (!found) {
+            pullBtn.textContent = 'まだありません（同期待ち）';
+            setTimeout(() => { pullBtn.textContent = '結果を取り込む'; }, 3000);
+            return;
+          }
+          loadReport(found.text, '_入稿チェック結果.json');
+          pullBtn.textContent = '取り込みました';
+          els.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) {
+          pullBtn.textContent = String(e.message || e).slice(0, 40);
+        } finally {
+          pullBtn.disabled = false;
+        }
+      });
+      body.appendChild(pullBtn);
+    });
+
+    box.appendChild(steps);
+
+    /* 以下は普段は畳んでおく。必要な人だけが開く */
+    const more = document.createElement('details');
+    more.className = 'more';
+    const sum = document.createElement('summary');
+    sum.textContent = 'メニューに出ない・うまくいかないとき';
+    more.appendChild(sum);
+
+    const mk = (cls, text) => {
+      const el = document.createElement('p');
+      el.className = cls;
+      el.textContent = text;
+      return el;
+    };
+
+    more.appendChild(mk('mh', 'メニューに「GAAAT入稿チェック」が無い場合'));
+    more.appendChild(mk('mt', 'まだ登録していないか、Illustrator を再起動していません。登録は次の1行をターミナルで実行します（Macのパスワードを聞かれます。打っても画面には何も出ません）。'));
+    const cmd = document.createElement('pre');
+    cmd.className = 'cmd';
+    cmd.textContent = 'curl -fsSL https://akinoritsuguchi.github.io/gaaat-banner-tool/check/install-mac.sh | sudo bash';
+    more.appendChild(cmd);
+
+    more.appendChild(mk('mh', '登録せずに使う場合'));
+    more.appendChild(mk('mt', 'ファイル → スクリプト → その他のスクリプト... から preflight.jsx を選びます。フォルダ選択が出てしまう場合は、preflight.jsx が古い版です。下のボタンで保存し直してください。'));
+    const dl = document.createElement('a');
+    dl.className = 'dlbtn';
+    dl.href = 'preflight.jsx';
+    dl.setAttribute('download', '');
+    dl.textContent = 'preflight.jsx を保存（最新版）';
+    more.appendChild(dl);
+
+    more.appendChild(mk('mh', 'このフォルダの場所'));
+    const crumb = document.createElement('p');
+    crumb.className = 'crumb';
+    crumb.textContent = 'マイドライブ / ' + path.join(' / ');
+    more.appendChild(crumb);
     if (localPath) {
       const lp = document.createElement('div');
       lp.className = 'localpath';
       lp.textContent = localPath;
-      box.appendChild(lp);
-
+      more.appendChild(lp);
       const copy = document.createElement('button');
       copy.className = 'copy';
       copy.textContent = 'このパスをコピー';
@@ -881,130 +984,26 @@
           },
           () => { copy.textContent = 'コピーできませんでした'; });
       });
-      box.appendChild(copy);
+      more.appendChild(copy);
     }
 
-    // 選んだあと何をすればいいのかが分からない、という声があったので、
-    // 次の操作をここに置く。結果はページ下部に出るため気づかれにくい。
-    const next = document.createElement('div');
-    next.className = 'nextsteps';
-    const nh = document.createElement('h4');
-    nh.textContent = '次にやること';
-    next.appendChild(nh);
+    more.appendChild(mk('mh', '結果が取り込めないとき'));
+    more.appendChild(mk('mt', 'ドライブの同期待ちです。少し置いてもう一度「結果を取り込む」を押してください。手順2の枠にJSONを直接ドロップしても読めます。'));
 
-    // 「どこで作業するのか」が書いていないと迷う、という指摘があったので
-    // 場所ごとに区切って出す（ページ → Illustrator → ページ）。
-    [
-      { where: 'このページで', steps: [
-        '下の「① Illustratorに渡す」を押す',
-        '画面は変わりませんが、ダウンロードフォルダに小さな指示ファイルが落ちます'
-      ] },
-      { where: 'Illustrator で', steps: [
-        'Illustrator を開く（ファイルは何も開かなくていい）',
-        'メニューの ファイル → スクリプト → その他のスクリプト...',
-        'ダウンロードフォルダの preflight.jsx を選んで「開く」',
-        '「' + (path[path.length - 1] || 'このフォルダ') + ' をチェックしますか？」→ はい',
-        '数分待つ（.ai はスクリプトが開いて、保存せず閉じます）'
-      ], warn:
-        'ここで Finder のフォルダ選択が出てきたら、preflight.jsx が古い版です。' +
-        '下の「preflight.jsx を保存（最新版）」で上書き保存し直してください。' },
-      { where: 'このページに戻って', steps: [
-        '「② 結果を取り込む」を押す → 5項目そろった判定が出ます'
-      ] }
-    ].forEach(group => {
-      const wh = document.createElement('p');
-      wh.className = 'where';
-      wh.textContent = group.where;
-      next.appendChild(wh);
-      const ol = document.createElement('ol');
-      group.steps.forEach(t => {
-        const li = document.createElement('li');
-        li.textContent = t;
-        ol.appendChild(li);
-      });
-      next.appendChild(ol);
-      if (group.warn) {
-        const w = document.createElement('p');
-        w.className = 'warn';
-        w.textContent = group.warn;
-        next.appendChild(w);
-      }
-    });
+    box.appendChild(more);
 
-    const row = document.createElement('div');
-    row.className = 'nextbtns';
-
-    // ① 対象フォルダをファイルに書き出す。JSXがダウンロードフォルダから拾うので、
-    //    Illustrator 側でフォルダを選ぶ操作が丸ごと消える。
-    const jobBtn = document.createElement('button');
-    jobBtn.className = 'copy primary';
-    jobBtn.textContent = '① Illustratorに渡す';
-    jobBtn.disabled = !localPath;
-    jobBtn.addEventListener('click', () => {
-      const job = { folderPath: localPath, folderName: path[path.length - 1] || '',
-                    createdAt: new Date().toISOString() };
-      const blob = new Blob([JSON.stringify(job, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'gaaat-check-job.json';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-      jobBtn.textContent = '① 渡しました';
-      setTimeout(() => { jobBtn.textContent = '① Illustratorに渡す'; }, 2500);
-    });
-    row.appendChild(jobBtn);
-
-    // ② 結果はドライブ側に書かれるので、そのまま読む。人がファイルを探さなくていい。
-    const pullBtn = document.createElement('button');
-    pullBtn.className = 'copy';
-    pullBtn.textContent = '② 結果を取り込む';
-    pullBtn.addEventListener('click', async () => {
-      pullBtn.disabled = true;
-      pullBtn.textContent = '探しています…';
-      try {
-        const found = await fetchResultJson(state.folderId);
-        if (!found) {
-          pullBtn.textContent = 'まだ結果がありません';
-          setTimeout(() => { pullBtn.textContent = '② 結果を取り込む'; }, 2500);
-          return;
-        }
-        loadReport(found.text, '_入稿チェック結果.json');
-        pullBtn.textContent = '取り込みました';
-        els.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } catch (e) {
-        pullBtn.textContent = String(e.message || e).slice(0, 40);
-      } finally {
-        pullBtn.disabled = false;
-      }
-    });
-    row.appendChild(pullBtn);
-
+    const foot = document.createElement('p');
+    foot.className = 'note';
+    foot.textContent = 'ペアの有無と新しさは、この時点でもう判定できています（ページ下部）。';
     const jump = document.createElement('button');
-    jump.className = 'copy';
-    jump.textContent = 'いまの判定結果を見る';
+    jump.className = 'linky';
+    jump.textContent = '結果を見る';
     jump.addEventListener('click', () => {
       els.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
-    row.appendChild(jump);
-
-    // 前に落としたまま古い版を使い続ける事故が実際に起きたので、
-    // 手順のすぐ横でいつでも取り直せるようにしておく。
-    const dl = document.createElement('a');
-    dl.className = 'dlbtn';
-    dl.href = 'preflight.jsx';
-    dl.setAttribute('download', '');
-    dl.textContent = 'preflight.jsx を保存（最新版）';
-    row.appendChild(dl);
-
-    next.appendChild(row);
-
-    const note = document.createElement('p');
-    note.className = 'note';
-    note.textContent = 'ペアの有無と新しさは、この時点でもう判定できています（ページ下部）。' +
-      '残りの4項目は .ai の中身が要るので、Illustrator を1回だけ走らせてください。' +
-      '結果がまだ出ないときは、ドライブの同期待ちです。少し置いてもう一度押してください。';
-    next.appendChild(note);
-    box.appendChild(next);
+    foot.appendChild(document.createTextNode(' '));
+    foot.appendChild(jump);
+    box.appendChild(foot);
   }
 
   document.addEventListener('DOMContentLoaded', boot);
