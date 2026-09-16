@@ -710,8 +710,10 @@ function findDriveFileByName(ref) {
 // リーフレットに必要なのは長辺でも1100px程度なので、Driveが持っている
 // サムネイルを大きめのサイズで貰って使う。
 const DRIVE_THUMB_EDGE = 2048;
-// サムネイルが無いファイルだけ原寸に取りにいく。その場合の上限。
-const DRIVE_FULL_MAX_BYTES = 40 * 1024 * 1024;
+// Driveは大きすぎる画像のサムネイルを作らない（シグルイの100MB超の点は軒並み無い）。
+// その場合は原寸を落とすしかないので、サイズ上限は設けない。ただし原寸のまま
+// 展開するとメモリを食い切るので、復号時に縮めて受け取る。
+const ART_MAX_EDGE = 2400;
 
 function upsizeThumbnail(link) {
   // thumbnailLink の末尾は「=s220」「=s220-p-k-no-nu」のようなサイズ＋フラグ指定。
@@ -731,20 +733,59 @@ function loadCrossOriginImage(url) {
   });
 }
 
-async function fetchDriveImage(file) {
+// 原寸は数千万画素あり、13点ぶん抱えるとタブが落ちる。復号したあと長辺が
+// ART_MAX_EDGE を超えていたら縮小版を作り、原寸のビットマップは即座に解放する。
+// 判定にファイルサイズを使ってはいけない。PNGは絵柄によって圧縮率が極端に変わり、
+// 6000×8400でも1MBを切ることがある。効いてくるのは画素数のほう。
+async function decodeArtBlob(blob) {
+  if (isTiffBlob(blob)) return loadImageFromBlob(blob);   // TIFFは復号側で既に縮めている
+  if (typeof createImageBitmap !== 'function') return loadImageFromBlob(blob);
+
+  let bmp;
+  try {
+    bmp = await createImageBitmap(blob);
+  } catch (err) {
+    return loadImageFromBlob(blob);
+  }
+  const edge = Math.max(bmp.width, bmp.height);
+  if (edge <= ART_MAX_EDGE) return bmp;
+
+  const scale = ART_MAX_EDGE / edge;
+  try {
+    const small = await createImageBitmap(bmp, {
+      resizeWidth: Math.round(bmp.width * scale),
+      resizeHeight: Math.round(bmp.height * scale),
+      resizeQuality: 'high'
+    });
+    bmp.close();
+    return small;
+  } catch (err) {
+    console.warn('縮小に失敗したので原寸のまま使います', err);
+    return bmp;
+  }
+}
+
+async function fetchDriveImage(file, onProgress) {
+  let thumbNote = '';
   if (file.thumbnailLink) {
     try {
       return await loadCrossOriginImage(upsizeThumbnail(file.thumbnailLink));
     } catch (err) {
+      thumbNote = 'サムネイルの読み込みに失敗';
       console.warn(`${file.name}: サムネイル取得に失敗したので原寸を試します`, err);
     }
+  } else {
+    thumbNote = 'サムネイルなし';
   }
+
   const size = Number(file.size) || 0;
-  if (size > DRIVE_FULL_MAX_BYTES) {
-    throw new Error(`ファイルが大きすぎます（${Math.round(size / 1048576)}MB）。サムネイルも取得できませんでした`);
+  if (onProgress && size) onProgress(Math.round(size / 1048576));
+  try {
+    const res = await googleApiFetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`);
+    return await decodeArtBlob(await res.blob());
+  } catch (err) {
+    throw new Error(`${thumbNote ? thumbNote + '、' : ''}原寸の取得にも失敗（${err.message}）`);
   }
-  const res = await googleApiFetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`);
-  return loadImageFromBlob(await res.blob());
 }
 
 // シートの画像リンク列がURL直指定だったときは一覧に無いので、メタ情報だけ引く。
@@ -774,7 +815,10 @@ async function fetchAllArtImages() {
     try {
       if (fileId) target = await fetchDriveFileMeta(fileId);
       if (!target) { a.imgStatus = 'error'; failed++; continue; }
-      a.img = await fetchDriveImage(target);
+      a.img = await fetchDriveImage(target, mb => {
+        setStatus(els.driveStatus,
+          `作品画像を取得中… (${i + 1}/${targets.length}) ${a.name}　原寸${mb}MBを読み込んでいます（時間がかかります）`);
+      });
       a.imgStatus = 'ok';
       ok++;
     } catch (err) {
