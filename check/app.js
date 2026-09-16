@@ -440,13 +440,13 @@
     } else if (!state.priceSet) {
       checks.push({ status: 'info', title: '金額', detail: '手順3で正しい金額を読み込むと、ここで突き合わせます。' });
     } else {
-      const allow = new Set(state.priceSet);
-      parseExtraPrices(els.extraPrices.value).forEach(v => allow.add(v));
+      const allowSet = new Set(state.priceSet);
+      parseExtraPrices(els.extraPrices.value).forEach(v => allowSet.add(v));
       const found = extractMoneyFromTexts(pre.texts);
       const bad = [];
       const seenOk = new Set();
       found.forEach(item => {
-        if (allow.has(item.value)) seenOk.add(item.value);
+        if (allowSet.has(item.value)) seenOk.add(item.value);
         else bad.push(item);
       });
       if (found.length === 0) {
@@ -457,16 +457,46 @@
       } else if (bad.length === 0) {
         checks.push({
           status: 'ok', title: '金額',
-          detail: '誌面の金額 ' + found.length + ' 件（種類は ' + seenOk.size + ' 通り）は、すべてシートの価格に含まれています。',
+          detail: '誌面に出てくる金額 ' + seenOk.size + ' 種類は、すべて ' + state.priceSource + ' の価格と一致しました。',
           lines: Array.from(seenOk).sort((a, b) => a - b).map(formatYen)
         });
       } else {
         const uniq = new Map();
         bad.forEach(b => { if (!uniq.has(b.value)) uniq.set(b.value, b); });
+        const allow = Array.from(allowSet).sort((a, b) => a - b);
+        const total = uniq.size + seenOk.size;
+
+        // 「¥181,500 ← 「¥181,500（税込）」」のように同じ数字を2回出しても
+        // 何が問題か分からない。シート側で一番近い価格と差額を出して、
+        // 打ち間違いなのか、そもそもシートが違うのかを判断できるようにする。
+        const lines = Array.from(uniq.values())
+          .sort((a, b) => a.value - b.value)
+          .map(b => {
+            let near = null;
+            allow.forEach(v => {
+              if (near === null || Math.abs(v - b.value) < Math.abs(near - b.value)) near = v;
+            });
+            if (near === null) return '誌面 ' + formatYen(b.value) + ' … シートに価格がありません';
+            const diff = b.value - near;
+            const sign = diff > 0 ? '+' : '−';
+            return '誌面 ' + formatYen(b.value) + ' … シートに無し（最も近い価格 ' +
+              formatYen(near) + ' / 差 ' + sign + Math.abs(diff).toLocaleString('ja-JP') + '円）';
+          });
+
+        lines.push('― 照合先: ' + state.priceSource + '（価格 ' + allow.length + ' 種類）');
+        if (seenOk.size > 0) {
+          lines.push('― 一致した金額: ' + seenOk.size + ' 種類');
+        }
+        // 全部外れているなら、直すべきは誌面ではなくタブの選択である可能性が高い。
+        if (seenOk.size === 0 && uniq.size >= 2) {
+          lines.push('― 誌面の金額がひとつも一致していません。シートのタブが違う可能性があります。');
+        }
+
         checks.push({
           status: 'ng', title: '金額',
-          detail: 'シートの価格に無い金額が ' + uniq.size + ' 種類あります（' + state.priceSource + ' と照合）。',
-          lines: Array.from(uniq.values()).map(b => formatYen(b.value) + '  ← 「' + b.context + '」')
+          detail: '誌面に出てくる金額 ' + total + ' 種類のうち ' + uniq.size +
+            ' 種類が、シートの価格に見つかりません。',
+          lines: lines
         });
       }
     }
@@ -642,7 +672,7 @@
     ['drop', 'filePicker', 'loaded', 'sizePreset', 'expW', 'expH', 'tolMm', 'allowRotate',
      'bleedMm', 'tabSheet', 'tabPaste', 'paneSheet', 'panePaste', 'btnSignIn', 'sheetUrl',
      'btnLoadSheet', 'googleStatus', 'sheetStatus', 'pasteArea', 'btnLoadPaste', 'extraPrices',
-     'priceStatus', 'results', 'folderUrl', 'btnLoadFolder', 'folderInfo', 'btnFindProjects', 'projectList', 'projectFilter']
+     'priceStatus', 'results', 'folderUrl', 'btnLoadFolder', 'folderInfo', 'btnFindProjects', 'projectList', 'projectFilter', 'actions']
       .forEach(id => { els[id] = document.getElementById(id); });
 
     els.drop.addEventListener('click', () => els.filePicker.click());
@@ -830,11 +860,12 @@
   // ここが分からないのが「面倒くささ」の実体なので、経路をそのまま見せる。
   // 画面に出すのは「いま押すもの」だけにする。経路・パス・予備手段は畳む。
   // 手順を全部並べると、どれが自分に関係あるのか分からなくなるため。
+  // 手順1のパネルは「どの案件を見ているか」だけ。実行の操作は手順4に置く
+  // （サイズと金額の基準を決めてから走らせたほうが、二度手間にならないため）。
   function renderFolderInfo(path, files, ai, localPath) {
     const box = els.folderInfo;
     box.textContent = '';
 
-    /* 見出し: どの案件を見ているか */
     const h = document.createElement('h4');
     h.textContent = path[path.length - 1] || 'このフォルダ';
     box.appendChild(h);
@@ -844,12 +875,40 @@
     sub.textContent = ai.length
       ? ai.map(f => {
           const mb = Math.round(Number(f.size || 0) / 1048576);
-          return f.name.replace(/R\d+.*$/, '').trim() + (mb ? ' ' + mb + 'MB' : '');
+          const tag = f.name.indexOf('[ol前]') !== -1 ? '[ol前]'
+                    : f.name.indexOf('[ol後]') !== -1 ? '[ol後]' : f.name;
+          return tag + (mb ? ' ' + mb + 'MB' : '');
         }).join(' ／ ')
       : 'このフォルダの直下に .ai がありません。';
     box.appendChild(sub);
 
-    /* 手順は3つだけ。ボタンはその手順の中に置く */
+    const crumb = document.createElement('p');
+    crumb.className = 'crumb';
+    crumb.textContent = 'マイドライブ / ' + path.join(' / ');
+    box.appendChild(crumb);
+
+    const foot = document.createElement('p');
+    foot.className = 'note';
+    foot.textContent = 'ペアの有無と新しさは、もう判定できています。';
+    const jump = document.createElement('button');
+    jump.className = 'linky';
+    jump.textContent = '結果を見る';
+    jump.addEventListener('click', () => {
+      els.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    foot.appendChild(document.createTextNode(' '));
+    foot.appendChild(jump);
+    box.appendChild(foot);
+
+    renderActions(path, localPath);
+  }
+
+  // 手順4。押すものだけを3つ並べる。
+  function renderActions(path, localPath) {
+    const box = els.actions;
+    box.textContent = '';
+    const name = path[path.length - 1] || 'このフォルダ';
+
     const steps = document.createElement('div');
     steps.className = 'steps';
 
@@ -871,15 +930,13 @@
       steps.appendChild(row);
     }
 
-    let jobBtn, pullBtn;
-
     addStep('1', 'このページで', body => {
-      jobBtn = document.createElement('button');
-      jobBtn.className = 'act primary';
-      jobBtn.textContent = 'Illustratorに渡す';
-      jobBtn.disabled = !localPath;
-      jobBtn.addEventListener('click', () => {
-        const job = { folderPath: localPath, folderName: path[path.length - 1] || '',
+      const b = document.createElement('button');
+      b.className = 'act primary';
+      b.textContent = 'Illustratorに渡す';
+      b.disabled = !localPath;
+      b.addEventListener('click', () => {
+        const job = { folderPath: localPath, folderName: name,
                       createdAt: new Date().toISOString() };
         const blob = new Blob([JSON.stringify(job, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
@@ -887,10 +944,10 @@
         a.download = 'gaaat-check-job.json';
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-        jobBtn.textContent = '渡しました';
-        setTimeout(() => { jobBtn.textContent = 'Illustratorに渡す'; }, 2500);
+        b.textContent = '渡しました';
+        setTimeout(() => { b.textContent = 'Illustratorに渡す'; }, 2500);
       });
-      body.appendChild(jobBtn);
+      body.appendChild(b);
     });
 
     addStep('2', 'Illustrator で', body => {
@@ -900,110 +957,37 @@
       body.appendChild(menu);
       const say = document.createElement('p');
       say.className = 'say';
-      say.textContent = '「' + (path[path.length - 1] || 'このフォルダ') +
-        ' をチェックしますか？」と出るので「はい」。あとは数分待つだけ。';
+      say.textContent = '「' + name + ' をチェックしますか？」と出るので「はい」。あとは数分待つだけ。';
       body.appendChild(say);
     });
 
     addStep('3', 'このページに戻って', body => {
-      pullBtn = document.createElement('button');
-      pullBtn.className = 'act';
-      pullBtn.textContent = '結果を取り込む';
-      pullBtn.addEventListener('click', async () => {
-        pullBtn.disabled = true;
-        pullBtn.textContent = '探しています…';
+      const b = document.createElement('button');
+      b.className = 'act';
+      b.textContent = '結果を取り込む';
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        b.textContent = '探しています…';
         try {
           const found = await fetchResultJson(state.folderId);
           if (!found) {
-            pullBtn.textContent = 'まだありません（同期待ち）';
-            setTimeout(() => { pullBtn.textContent = '結果を取り込む'; }, 3000);
+            b.textContent = 'まだありません（同期待ち）';
+            setTimeout(() => { b.textContent = '結果を取り込む'; }, 3000);
             return;
           }
           loadReport(found.text, '_入稿チェック結果.json');
-          pullBtn.textContent = '取り込みました';
+          b.textContent = '取り込みました';
           els.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch (e) {
-          pullBtn.textContent = String(e.message || e).slice(0, 40);
+          b.textContent = String(e.message || e).slice(0, 40);
         } finally {
-          pullBtn.disabled = false;
+          b.disabled = false;
         }
       });
-      body.appendChild(pullBtn);
+      body.appendChild(b);
     });
 
     box.appendChild(steps);
-
-    /* 以下は普段は畳んでおく。必要な人だけが開く */
-    const more = document.createElement('details');
-    more.className = 'more';
-    const sum = document.createElement('summary');
-    sum.textContent = 'メニューに出ない・うまくいかないとき';
-    more.appendChild(sum);
-
-    const mk = (cls, text) => {
-      const el = document.createElement('p');
-      el.className = cls;
-      el.textContent = text;
-      return el;
-    };
-
-    more.appendChild(mk('mh', 'メニューに「GAAAT入稿チェック」が無い場合'));
-    more.appendChild(mk('mt', 'まだ登録していないか、Illustrator を再起動していません。登録は次の1行をターミナルで実行します（Macのパスワードを聞かれます。打っても画面には何も出ません）。'));
-    const cmd = document.createElement('pre');
-    cmd.className = 'cmd';
-    cmd.textContent = 'curl -fsSL https://akinoritsuguchi.github.io/gaaat-banner-tool/check/install-mac.sh | sudo bash';
-    more.appendChild(cmd);
-
-    more.appendChild(mk('mh', '登録せずに使う場合'));
-    more.appendChild(mk('mt', 'ファイル → スクリプト → その他のスクリプト... から preflight.jsx を選びます。フォルダ選択が出てしまう場合は、preflight.jsx が古い版です。下のボタンで保存し直してください。'));
-    const dl = document.createElement('a');
-    dl.className = 'dlbtn';
-    dl.href = 'preflight.jsx';
-    dl.setAttribute('download', '');
-    dl.textContent = 'preflight.jsx を保存（最新版）';
-    more.appendChild(dl);
-
-    more.appendChild(mk('mh', 'このフォルダの場所'));
-    const crumb = document.createElement('p');
-    crumb.className = 'crumb';
-    crumb.textContent = 'マイドライブ / ' + path.join(' / ');
-    more.appendChild(crumb);
-    if (localPath) {
-      const lp = document.createElement('div');
-      lp.className = 'localpath';
-      lp.textContent = localPath;
-      more.appendChild(lp);
-      const copy = document.createElement('button');
-      copy.className = 'copy';
-      copy.textContent = 'このパスをコピー';
-      copy.addEventListener('click', () => {
-        navigator.clipboard.writeText(localPath).then(
-          () => {
-            copy.textContent = 'コピーしました';
-            setTimeout(() => { copy.textContent = 'このパスをコピー'; }, 1600);
-          },
-          () => { copy.textContent = 'コピーできませんでした'; });
-      });
-      more.appendChild(copy);
-    }
-
-    more.appendChild(mk('mh', '結果が取り込めないとき'));
-    more.appendChild(mk('mt', 'ドライブの同期待ちです。少し置いてもう一度「結果を取り込む」を押してください。手順2の枠にJSONを直接ドロップしても読めます。'));
-
-    box.appendChild(more);
-
-    const foot = document.createElement('p');
-    foot.className = 'note';
-    foot.textContent = 'ペアの有無と新しさは、この時点でもう判定できています（ページ下部）。';
-    const jump = document.createElement('button');
-    jump.className = 'linky';
-    jump.textContent = '結果を見る';
-    jump.addEventListener('click', () => {
-      els.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    foot.appendChild(document.createTextNode(' '));
-    foot.appendChild(jump);
-    box.appendChild(foot);
   }
 
   document.addEventListener('DOMContentLoaded', boot);

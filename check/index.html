@@ -103,6 +103,31 @@
   .howto ol b{color:var(--text);}
   .howto code{background:var(--panel-bg2);padding:1px 5px;border-radius:4px;color:var(--text);font-size:11.5px;}
   .howto .hint{margin:12px 0 0;}
+  .howto .mh{margin:16px 0 4px;font-size:12px;color:var(--text);font-weight:700;}
+  .howto .mh:first-of-type{margin-top:12px;}
+  .howto .mt{margin:0;font-size:11.5px;color:var(--muted);line-height:1.8;}
+  .howto #drop{margin-top:10px;padding:20px 16px;}
+  .howto #drop strong{font-size:13px;}
+
+  #actions{margin-top:10px;}
+  #actions .steps{display:flex;flex-direction:column;gap:14px;}
+  #actions .step{display:grid;grid-template-columns:26px 1fr;gap:12px;align-items:start;}
+  #actions .step .n{
+    width:24px;height:24px;border-radius:50%;
+    background:var(--accent);color:#fff;
+    display:grid;place-items:center;font-size:12px;font-weight:700;margin-top:1px;
+  }
+  #actions .step .body{min-width:0;}
+  #actions .step .w{margin:0 0 6px;font-size:10.5px;letter-spacing:.08em;color:var(--muted);font-weight:700;}
+  #actions .step .menu{
+    margin:0;padding:9px 12px;background:#15171b;border:1px solid var(--border);
+    border-radius:5px;font-size:13px;color:var(--text);font-weight:600;
+  }
+  #actions .step .say{margin:6px 0 0;font-size:12px;color:var(--muted);line-height:1.7;}
+  #actions button.act{width:auto;padding:10px 20px;font-size:13.5px;font-weight:700;}
+  #actions button.act.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  #actions button.act.primary:hover:not(:disabled){background:#ef6357;}
+  #actions .waiting{font-size:12px;color:var(--muted);margin:0;}
   .howto .cmd{
     background:#121418;border:1px solid var(--border);border-left:3px solid var(--accent);
     border-radius:4px;padding:10px 12px;margin:10px 0;overflow-x:auto;
@@ -308,8 +333,8 @@
 
   <h1>GAAAT 入稿チェック</h1>
   <p class="sub">
-    入稿フォルダのURLを貼ると、ペアの有無と新しさをその場で判定します。
-    アウトライン化・画像の埋め込み・金額・サイズは .ai の中身が要るので、Illustrator で出したJSONを足してください。
+    案件を選び、サイズと金額の基準を決めてから、Illustrator で1回チェックを走らせます。
+    ペアの有無と新しさは、案件を選んだ時点で判定できます。
   </p>
 
   <fieldset>
@@ -332,58 +357,7 @@
   </fieldset>
 
   <fieldset>
-    <legend>手順2 — Illustratorでの詳細チェック</legend>
-    <p class="hint" style="margin:0 0 12px;">
-      アウトライン化・画像の埋め込み・金額・サイズは、.ai の中身を読む必要があるので
-      Illustrator で1回スクリプトを走らせます。出てきたJSONをここに入れてください。
-    </p>
-    <div id="drop">
-      <strong>_入稿チェック結果.json をここにドラッグ&amp;ドロップ</strong>
-      クリックしてファイルを選ぶこともできます
-    </div>
-    <input type="file" id="filePicker" accept=".json,application/json" hidden>
-    <div id="loaded"></div>
-
-    <details class="howto">
-      <summary>JSONの作り方（Illustratorで1回実行するだけ）</summary>
-      <ol>
-        <li>下のボタンで <code>preflight.jsx</code> を保存する（保存先はどこでもOK）</li>
-        <li><b>Illustrator を起動する</b>（ファイルは開かなくてよい）</li>
-        <li><b>ファイル → スクリプト → その他のスクリプト...</b> で、保存した <code>preflight.jsx</code> を選ぶ</li>
-        <li>フォルダを選ぶ画面が出たら、<b>Cmd + Shift + G</b> を押して、手順1でコピーしたパスを貼り付けて Enter。
-          一気にその場所へ飛べる（6階層たどらなくてよい）</li>
-        <li>進捗バーが出る。入稿データは1本400MB以上あるので<b>数分かかる</b>。終わるまで待つ</li>
-        <li><b>「環境にないフォント」</b>が出たら <b>「閉じる」</b>。「フォントを置換...」は押さない
-          （文字が別のフォントに変わり、チェックが見るものが変わってしまう）。
-          ダイアログ下の「ドキュメントを開く時に表示しない」にチェックを入れておくと、次から止まらない</li>
-        <li>同じフォルダに <code>_入稿チェック結果.json</code> ができるので、上の枠にドラッグ&amp;ドロップ</li>
-      </ol>
-      <p class="hint">
-        手順1で「① Illustratorに渡す」を押していれば、<b>フォルダを選ぶ画面は出ません</b>
-        （「このフォルダでいいですか」と聞かれるので「はい」を押すだけ）。
-      </p>
-      <p class="hint">
-        <b>毎回ファイルを探すのが面倒なら、1回だけ登録しておけます。</b>
-        ターミナルで次の1行を実行すると（Macのパスワードを聞かれます）、
-        Illustrator の <b>ファイル → スクリプト → GAAAT入稿チェック</b> に直接出るようになります。
-        常に最新版を取りに行くので、古い版が残る心配もありません。
-      </p>
-      <pre class="cmd">curl -fsSL https://akinoritsuguchi.github.io/gaaat-banner-tool/check/install-mac.sh | sudo bash</pre>
-      <p class="hint">
-        パスワードは<b>打っても画面に何も出ません</b>（それで正常です）。
-        日本語入力になっていると打てないので、「英数」キーを押してから入力してください。
-        実行後は Illustrator を再起動します。<br>
-        この登録をしない場合は、<code>preflight.jsx</code> を
-        Illustrator の「スクリプト」フォルダに入れておくと、<b>ファイル → スクリプト</b> の
-        直下に出るようになります。スクリプトはファイルを保存せずに閉じるので、
-        入稿データが書き換わることはありません。
-      </p>
-      <a class="dl" href="preflight.jsx" download>preflight.jsx を保存</a>
-    </details>
-  </fieldset>
-
-  <fieldset>
-    <legend>手順3 — 仕上がりサイズ</legend>
+    <legend>手順2 — 仕上がりサイズ</legend>
     <label>仕上がりサイズ</label>
     <select id="sizePreset">
       <optgroup label="A判（リーフレット・チラシ・ポスター）">
@@ -427,7 +401,7 @@
   </fieldset>
 
   <fieldset>
-    <legend>手順4 — 正しい金額（ECサイトのシート）</legend>
+    <legend>手順3 — 正しい金額（ECサイトのシート）</legend>
     <div class="tabs">
       <button id="tabSheet" class="on">Googleから読む</button>
       <button id="tabPaste">シートを貼り付ける</button>
@@ -456,6 +430,39 @@
     <div class="status" id="priceStatus"></div>
   </fieldset>
 
+  <fieldset>
+    <legend>手順4 — Illustratorでチェック</legend>
+    <p class="hint" style="margin:0 0 4px;">
+      アウトライン化・画像の埋め込み・金額・サイズは .ai の中身を読む必要があるので、
+      Illustrator で1回だけスクリプトを走らせます。
+    </p>
+    <div id="actions"></div>
+
+    <details class="howto">
+      <summary>メニューに出ない・うまくいかないとき</summary>
+
+      <p class="mh">メニューに「GAAAT入稿チェック」が無い</p>
+      <p class="mt">まだ登録していないか、Illustrator を再起動していません。
+        登録は次の1行をターミナルで実行します（Macのパスワードを聞かれます。打っても画面には何も出ません）。</p>
+      <pre class="cmd">curl -fsSL https://akinoritsuguchi.github.io/gaaat-banner-tool/check/install-mac.sh | sudo bash</pre>
+
+      <p class="mh">登録せずに使う</p>
+      <p class="mt">ファイル → スクリプト → その他のスクリプト... から <code>preflight.jsx</code> を選びます。
+        フォルダ選択が出てしまう場合は、<code>preflight.jsx</code> が古い版です。下のボタンで保存し直してください。</p>
+      <a class="dl" href="preflight.jsx" download>preflight.jsx を保存（最新版）</a>
+
+      <p class="mh">結果が取り込めない</p>
+      <p class="mt">ドライブの同期待ちです。少し置いてもう一度「結果を取り込む」を押してください。
+        急ぐ場合は、入稿フォルダにできた <code>_入稿チェック結果.json</code> をここに直接入れても読めます。</p>
+      <div id="drop">
+        <strong>_入稿チェック結果.json をドラッグ&amp;ドロップ</strong>
+        クリックしてファイルを選ぶこともできます
+      </div>
+      <input type="file" id="filePicker" accept=".json,application/json" hidden>
+      <div id="loaded"></div>
+    </details>
+  </fieldset>
+
   <div id="results"></div>
 
 </div>
@@ -463,6 +470,6 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="../shared/google.js?v=6"></script>
 <script src="../shared/master-sheet.js?v=6"></script>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>
