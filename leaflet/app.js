@@ -114,7 +114,7 @@ const els = {
   showArtistBio: $('showArtistBio'), artistBioName: $('artistBioName'), artistBioText: $('artistBioText'),
   layoutWarning: $('layoutWarning'),
 
-  foldType: $('foldType'), dpi: $('dpi'), bleed: $('bleed'), showTrim: $('showTrim'), showFold: $('showFold'),
+  foldType: $('foldType'), dpi: $('dpi'), bleed: $('bleed'), showFold: $('showFold'),
   colBg: $('colBg'), colText: $('colText'), colAccent: $('colAccent'),
 
   downloadPdfBtn: $('downloadPdfBtn'), downloadInnerBtn: $('downloadInnerBtn'),
@@ -898,31 +898,7 @@ function withAlpha(hex, alpha) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
 
-// ---------- 描画：トンボ・折りガイド ----------
-
-function drawTrimMarks(ctx, g) {
-  if (!els.showTrim.checked || g.bleed <= 0) return;
-  const len = Math.min(g.mm(g.bleed), g.mm(5));
-  const lw = Math.max(1, g.mm(0.15));
-  const trimW = g.mm(SHEET_W_MM);
-  const trimH = g.mm(SHEET_H_MM);
-  ctx.save();
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = lw;
-  const corner = (cx, cy, dx, dy) => {
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + dx * len, cy);
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx, cy + dy * len);
-    ctx.stroke();
-  };
-  corner(g.ox, g.oy, -1, -1);
-  corner(g.ox + trimW, g.oy, 1, -1);
-  corner(g.ox, g.oy + trimH, -1, 1);
-  corner(g.ox + trimW, g.oy + trimH, 1, 1);
-  ctx.restore();
-}
+// ---------- 描画：折りガイド ----------
 
 function drawFoldGuides(ctx, g, rects) {
   if (!els.showFold.checked) return;
@@ -1937,7 +1913,6 @@ function renderFace(canvas, face, dpi) {
   else drawOuter(ctx, g);
 
   drawFoldGuides(ctx, g, panelRects(g, face));
-  drawTrimMarks(ctx, g);
   return canvas;
 }
 
