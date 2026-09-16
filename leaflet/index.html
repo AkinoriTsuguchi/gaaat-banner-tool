@@ -5,7 +5,7 @@
 <title>GAAAT リーフレット自動生成ツール（A4三つ折り）</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Serif+JP:wght@400;600;700&family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Noto+Sans+JP:wght@700;900&family=Playfair+Display:wght@700&family=Shippori+Mincho:wght@700&family=Fredoka:wght@700&family=M+PLUS+Rounded+1c:wght@700&family=Orbitron:wght@700&family=Inter:wght@700&family=Anton&family=Bangers&family=Reggae+One&family=Cardo:wght@700&family=Yuji+Syuku&family=Press+Start+2P&family=DotGothic16&family=Poppins:wght@700&family=Zen+Kaku+Gothic+New:wght@700;900&family=Bebas+Neue&family=Stick&family=Pacifico&family=Yomogi&family=Abril+Fatface&family=Zen+Old+Mincho:wght@700&family=Archivo+Black&family=Dela+Gothic+One&family=Baloo+2:wght@700&family=Kosugi+Maru&family=Permanent+Marker&family=Klee+One:wght@600&family=Bungee&family=RocknRoll+One&family=Alfa+Slab+One&family=Mochiy+Pop+One&family=Staatliches&family=Yusei+Magic&family=Cinzel:wght@700&family=New+Tegomin&family=Caveat:wght@700&family=Kiwi+Maru:wght@500&family=VT323&family=Julius+Sans+One&family=Hina+Mincho&family=Special+Elite&family=Shippori+Antique&family=Cormorant+Garamond:wght@700&family=Kaisei+Opti:wght@700&family=Noto+Serif+JP:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --panel-bg:#1c1e22;
@@ -254,6 +254,8 @@
       <option value="banner">G ロゴ＋帯型（PEANUTS）</option>
     </select>
     <label class="check"><input type="checkbox" id="coverAuto" checked><span>表紙画像の配色からレイアウトを自動選択する</span></label>
+    <label>タイトルのフォント</label>
+    <select id="coverFont"></select>
     <p class="hint">過去のリーフレット表紙から起こした4パターンです。プルダウンを手で変えると自動選択はオフになります。Fは作品画像を使わず、版元支給のIPロゴとGAAATロゴを「×」で組みます（画像が使えずロゴのみ支給の案件用）。<strong>額縁やフレームなどの装飾はツール側では一切描きません</strong>（支給素材にすでに額が写っている場合に二重になるため）。</p>
     <p class="hint"><strong>画像は「デザインのみ」のデータをご用意ください。</strong>額装が写り込んだものや、まわりに余白が入ったもの（物撮りなど）は避けてください。ツール側では作品を一切トリミングしないので、余白はそのまま版面の余白になり、額付きの素材は誌面の枠と二重になります。TIFでもそのまま読み込めます。</p>
     <label>IPロゴ（Fロゴロックアップ型で使用）</label>
@@ -383,6 +385,6 @@
 <script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="logo.js"></script>
-<script src="app.js?v=29"></script>
+<script src="app.js?v=32"></script>
 </body>
 </html>

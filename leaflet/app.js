@@ -60,6 +60,60 @@ const BRAND_QR_SLOTS = [
   { key: 'qrIg', label: 'Instagram', src: 'assets/qr-ig.png' }
 ];
 
+// 表紙タイトルのフォント。バナーツール（../app.js の TITLE_FONT_PRESETS）と
+// 同じ並び・同じ呼び名にしてある。2つのツールで選択肢が食い違うと、同じ案件で
+// 表紙の印象が変わってしまうため。
+const COVER_FONT_PRESETS = {
+  gothic: { label: '太字ゴシック（デフォルト）', stack: '"Oswald","Noto Sans JP"' },
+  mincho: { label: '明朝・上品', stack: '"Playfair Display","Shippori Mincho"' },
+  rounded: { label: '丸ゴシック・ポップ', stack: '"Fredoka","M PLUS Rounded 1c"' },
+  cyber: { label: 'サイバー・近未来', stack: '"Orbitron","Noto Sans JP"' },
+  clean: { label: 'シンプル・ゴシック', stack: '"Inter","Noto Sans JP"' },
+  impact: { label: '極太インパクト・ポスター風', stack: '"Anton","Noto Sans JP"' },
+  comic: { label: 'コミック・レトロポップ', stack: '"Bangers","Reggae One"' },
+  brush: { label: '筆文字・和風', stack: '"Cardo","Yuji Syuku"' },
+  pixel: { label: 'ドット・レトロゲーム風', stack: '"Press Start 2P","DotGothic16"' },
+  elegant: { label: 'モダン・エレガント', stack: '"Poppins","Zen Kaku Gothic New"' },
+  bebas: { label: 'コンデンス・スタイリッシュ', stack: '"Bebas Neue","Stick"' },
+  script: { label: '手書き風スクリプト', stack: '"Pacifico","Yomogi"' },
+  classic: { label: 'クラシック・格調高い', stack: '"Abril Fatface","Zen Old Mincho"' },
+  blackGrotesk: { label: '極太グロテスク', stack: '"Archivo Black","Dela Gothic One"' },
+  friendlyRound: { label: 'フレンドリー・丸ゴシック', stack: '"Baloo 2","Kosugi Maru"' },
+  markerPop: { label: 'マーカー手書き・ポップ', stack: '"Permanent Marker","Klee One"' },
+  urbanBold: { label: 'アーバン・重厚感', stack: '"Bungee","RocknRoll One"' },
+  slabHeavy: { label: '極太スラブセリフ', stack: '"Alfa Slab One","Mochiy Pop One"' },
+  condensedImpact: { label: 'コンデンス・見出し向け', stack: '"Staatliches","Yusei Magic"' },
+  engraved: { label: '彫刻風・重厚', stack: '"Cinzel","New Tegomin"' },
+  handwriting: { label: 'ナチュラル手書き', stack: '"Caveat","Kiwi Maru"' },
+  terminal: { label: 'レトロ端末・ドット', stack: '"VT323","DotGothic16"' },
+  elegantThin: { label: '上品・細字エレガント', stack: '"Julius Sans One","Hina Mincho"' },
+  typewriter: { label: 'タイプライター・ヴィンテージ', stack: '"Special Elite","Shippori Antique"' },
+  warmSerif: { label: '温かみのあるセリフ', stack: '"Cormorant Garamond","Kaisei Opti"' }
+};
+
+// Canvasでの使用はWebフォントのダウンロードを発火させない（DOMで使われて初めて
+// 読み込まれる）。選択したフォントを明示的に読み込んでから描き直す。
+// これを挟まないと、プルダウンを変えても描画は既定のままになる。
+async function ensureCoverFontLoaded() {
+  const preset = COVER_FONT_PRESETS[els.coverFont.value] || COVER_FONT_PRESETS.gothic;
+  const families = preset.stack.match(/"[^"]+"/g) || [];
+  await Promise.race([
+    Promise.all(families.flatMap(f => [
+      document.fonts.load(`700 100px ${f}`).catch(() => {}),
+      document.fonts.load(`900 100px ${f}`).catch(() => {})
+    ])),
+    new Promise(r => setTimeout(r, 4000))   // 落ちてこなくても描画は止めない
+  ]);
+}
+
+// 表紙タイトルに使う実際のフォント指定。未選択・未知の値なら既定に戻す。
+function coverFont() {
+  const preset = COVER_FONT_PRESETS[els.coverFont.value] || COVER_FONT_PRESETS.gothic;
+  return `${preset.stack},${FONT_JP_FALLBACK}`;
+}
+
+const FONT_JP_FALLBACK = '"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif';
+
 const FONT_JP = '"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif';
 const FONT_SERIF = '"Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif';
 const FONT_EN = '"Oswald","Inter","Helvetica Neue",sans-serif';
@@ -82,6 +136,7 @@ const state = {
   howto: [],   // 購入手順の挿絵（HOWTO_ILLUSTRATIONS を読み込んだもの）
   coverImage: null,
   ipLogo: null,   // 版元支給のIPロゴ（Fロゴロックアップ型で使う）
+  logoStacked: null,   // 縦組みロゴ（Gロゴ＋帯型で使う）
   logo: null
 };
 
@@ -105,6 +160,7 @@ const els = {
   copyright: $('copyright'),
   coverImageInput: $('coverImageInput'),
   coverTemplate: $('coverTemplate'), coverAuto: $('coverAuto'), ipLogoInput: $('ipLogoInput'),
+  coverFont: $('coverFont'),
 
   boilerplatePreview: $('boilerplatePreview'), footNote: $('footNote'),
 
@@ -1529,7 +1585,7 @@ function drawCoverHero(ctx, g, r, ins, w, c, dark) {
   const lines = coverTitleLines();
   if (lines.length) {
     ctx.fillStyle = c.accent;
-    y = drawCoverHeadline(ctx, [lines[0]], cx, y, w, g.mm(13), FONT_SERIF, 700, 'center', 1.2, g.mm(42));
+    y = drawCoverHeadline(ctx, [lines[0]], cx, y, w, g.mm(13), coverFont(), 700, 'center', 1.2, g.mm(42));
   }
   lines.slice(1).forEach(line => {
     ctx.fillStyle = withAlpha(fg, .85);
@@ -1591,7 +1647,7 @@ function drawCoverVerticalJa(ctx, g, r, ins, w, c, dark) {
 
   if (lines.length) {
     ctx.fillStyle = c.accent;
-    ctx.font = `700 ${titleSize}px ${FONT_SERIF}`;
+    ctx.font = `700 ${titleSize}px ${coverFont()}`;
     let x = ins.right - titleSize * 0.65;
     lines.forEach(line => {
       drawVerticalText(ctx, line, x, titleTop, titleSize, g.mm(0.5));
@@ -1620,11 +1676,11 @@ function drawCoverCondensed(ctx, g, r, ins, w, c, dark) {
   const titleW = w - logoW - g.mm(5);
   if (lines.length) {
     ctx.fillStyle = c.accent;
-    y = drawCoverHeadline(ctx, [lines[0]], ins.left, y, titleW, g.mm(9.5), FONT_JP, 900, 'left', 1.15, g.mm(34));
+    y = drawCoverHeadline(ctx, [lines[0]], ins.left, y, titleW, g.mm(9.5), coverFont(), 900, 'left', 1.15, g.mm(34));
   }
   if (lines.length > 1) {
     ctx.fillStyle = fg;
-    y = drawCoverHeadline(ctx, lines.slice(1), ins.left, y, w, g.mm(7), FONT_JP, 900, 'left', 1.18);
+    y = drawCoverHeadline(ctx, lines.slice(1), ins.left, y, w, g.mm(7), coverFont(), 900, 'left', 1.18);
   }
 
   const subtitle = els.coverSubtitle.value.trim();
@@ -1698,7 +1754,7 @@ function drawCoverLogoLockup(ctx, g, r, ins, w, c, dark) {
   const lines = coverTitleLines();
   if (lines.length) {
     ctx.fillStyle = fg;
-    drawCoverHeadline(ctx, lines, cx, gy + g.mm(14), areaW, g.mm(3.6), FONT_JP, 700, 'center', 1.4);
+    drawCoverHeadline(ctx, lines, cx, gy + g.mm(14), areaW, g.mm(3.6), coverFont(), 700, 'center', 1.4);
   }
   drawCoverCopyright(ctx, g, cx, g.oy + g.mm(SHEET_H_MM) - g.mm(14), fg, 'center');
 }
@@ -1728,21 +1784,31 @@ function drawCoverBanner(ctx, g, r, ins, w, c, dark) {
   const subCount = Math.max(0, lines.length - 1);
 
   // ロゴとタイトルをひとまとまりとして、面の上半分に置く。
-  const logoW = Math.min(areaW * 0.82, g.mm(52));
-  const logoH = state.logo ? logoW * (state.logo.height / state.logo.width) : 0;
-  const blockH = logoH + g.mm(16) + (lines.length ? headSize : 0) +
+  // Gは縦組みロゴ（マークの下にワードマーク）を使い、その下にタグラインを添える。
+  const logo = state.logoStacked || state.logo;
+  const logoW = state.logoStacked ? Math.min(areaW * 0.46, g.mm(30)) : Math.min(areaW * 0.82, g.mm(52));
+  const logoH = logo ? logoW * (logo.height / logo.width) : 0;
+  const taglineSize = g.mm(2.2);
+  const taglineGap = g.mm(2.6);
+  const blockH = logoH + taglineGap + taglineSize + g.mm(16) + (lines.length ? headSize : 0) +
     (subCount ? g.mm(4) + subCount * subLine : 0);
   // QRを廃したぶん下が空くので、塊はやや上・ほぼ天地中央に置く。
   let y = g.oy + Math.max(g.mm(20), (g.mm(SHEET_H_MM) - blockH) * 0.44);
 
-  if (state.logo) {
-    drawContained(ctx, state.logo, cx - logoW / 2, y, logoW, logoH);
-    y += logoH + g.mm(16);
+  if (logo) {
+    drawContained(ctx, logo, cx - logoW / 2, y, logoW, logoH);
+    y += logoH + taglineGap;
+    ctx.fillStyle = fg;
+    ctx.font = `600 ${taglineSize}px ${FONT_EN}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(BOILERPLATE.about.lead, cx, y + taglineSize);
+    ctx.textAlign = 'left';
+    y += taglineSize + g.mm(16);
   }
 
   if (lines.length) {
     ctx.fillStyle = fg;
-    ctx.font = `700 ${headSize}px ${FONT_EN}`;
+    ctx.font = `700 ${headSize}px ${coverFont()}`;
     ctx.textAlign = 'center';
     drawTrackedText(ctx, lines[0], cx, y + headSize, g.mm(2.2));
     ctx.textAlign = 'left';
@@ -1751,7 +1817,7 @@ function drawCoverBanner(ctx, g, r, ins, w, c, dark) {
 
   // 2行目以降は素のテキストで中央に重ねる。
   ctx.fillStyle = fg;
-  ctx.font = `700 ${subSize}px ${FONT_JP}`;
+  ctx.font = `700 ${subSize}px ${coverFont()}`;
   ctx.textAlign = 'center';
   lines.slice(1).forEach(line => {
     ctx.fillText(line, cx, y + subSize);
@@ -2148,6 +2214,19 @@ els.resetOrderBtn.addEventListener('click', () => {
 });
 
 // 固定文言は編集できないぶん、何が刷られるのかは画面で読めるようにしておく。
+// 選択肢そのものを各フォントで表示して、開いた時点で見分けられるようにする。
+function renderCoverFontOptions() {
+  els.coverFont.innerHTML = '';
+  Object.entries(COVER_FONT_PRESETS).forEach(([key, preset]) => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = preset.label;
+    opt.style.fontFamily = preset.stack;
+    els.coverFont.appendChild(opt);
+  });
+  els.coverFont.value = 'gothic';
+}
+
 function renderBoilerplatePreview() {
   const esc = s => s.replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
   const steps = BOILERPLATE.buy.steps
@@ -2187,6 +2266,7 @@ bindImageInput(els.coverImageInput, 'coverImage', () => maybeAutoSelectCoverTemp
 bindImageInput(els.ipLogoInput, 'ipLogo', () => maybeAutoSelectCoverTemplate());
 
 els.coverTemplate.addEventListener('change', () => { els.coverAuto.checked = false; });
+els.coverFont.addEventListener('change', () => { ensureCoverFontLoaded().then(render); });
 els.coverAuto.addEventListener('change', () => { maybeAutoSelectCoverTemplate(); render(); });
 
 els.downloadPdfBtn.addEventListener('click', exportPdf);
@@ -2217,6 +2297,14 @@ BRAND_QR_SLOTS.forEach(slot => {
   img.src = slot.src;
 });
 
+// Gテンプレート用の縦組みロゴ（マークの下にワードマーク）。
+{
+  const img = new Image();
+  img.onload = () => { state.logoStacked = img; render(); };
+  img.onerror = () => console.warn('縦組みロゴが読み込めませんでした: assets/logo-stacked.png');
+  img.src = 'assets/logo-stacked.png';
+}
+
 HOWTO_ILLUSTRATIONS.forEach((src, i) => {
   const img = new Image();
   img.onload = () => { state.howto[i] = img; render(); };
@@ -2224,6 +2312,8 @@ HOWTO_ILLUSTRATIONS.forEach((src, i) => {
   img.src = src;
 });
 
+renderCoverFontOptions();
+ensureCoverFontLoaded().then(render);
 renderBoilerplatePreview();
 initGoogleAuthUI();
 renderArtList();
