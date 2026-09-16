@@ -1636,8 +1636,9 @@ function drawCoverLogoLockup(ctx, g, r, ins, w, c, dark) {
 
 // G：ロゴ＋帯型（PEANUTS）。作品画像を使わず、白地にGAAATロゴとタイトルだけを置き、
 // 右端に色帯を通す。版元のキービジュアルが使えない案件や、LIST主体の配布物向け。
-// タイトルは1行目を字間を空けた大見出し、2行目以降を黒地白抜きの帯として組む
+// タイトルは1行目を字間を空けた大見出し、2行目以降をその下に小さく重ねる
 // （「PEANUTS / Metal Canvas Art / List of Works」の並びがこの形）。
+// 元リーフレットは2行目以降を黒地白抜きの帯にしているが、そこは踏襲しない。
 function drawCoverBanner(ctx, g, r, ins, w, c, dark) {
   const fg = dark ? '#ffffff' : c.text;
   ctx.fillStyle = coverBgColor(c, dark);
@@ -1653,16 +1654,15 @@ function drawCoverBanner(ctx, g, r, ins, w, c, dark) {
 
   const lines = coverTitleLines();
   const headSize = g.mm(6.4);
-  const barSize = g.mm(4.2);
-  const barH = barSize * 1.75;
-  const barGap = g.mm(1.6);
+  const subSize = g.mm(4);
+  const subLine = subSize * 1.65;
   const subCount = Math.max(0, lines.length - 1);
 
   // ロゴとタイトルをひとまとまりとして、面の上半分に置く。
   const logoW = Math.min(areaW * 0.82, g.mm(52));
   const logoH = state.logo ? logoW * (state.logo.height / state.logo.width) : 0;
   const blockH = logoH + g.mm(16) + (lines.length ? headSize : 0) +
-    (subCount ? g.mm(3) + subCount * barH + (subCount - 1) * barGap : 0);
+    (subCount ? g.mm(4) + subCount * subLine : 0);
   // QRを廃したぶん下が空くので、塊はやや上・ほぼ天地中央に置く。
   let y = g.oy + Math.max(g.mm(20), (g.mm(SHEET_H_MM) - blockH) * 0.44);
 
@@ -1677,22 +1677,18 @@ function drawCoverBanner(ctx, g, r, ins, w, c, dark) {
     ctx.textAlign = 'center';
     drawTrackedText(ctx, lines[0], cx, y + headSize, g.mm(2.2));
     ctx.textAlign = 'left';
-    y += headSize + g.mm(3);
+    y += headSize + g.mm(4);
   }
 
-  // 2行目以降は黒地に白抜き。帯の幅は文字幅に合わせて1行ずつ決める。
+  // 2行目以降は素のテキストで中央に重ねる。
+  ctx.fillStyle = fg;
+  ctx.font = `700 ${subSize}px ${FONT_JP}`;
+  ctx.textAlign = 'center';
   lines.slice(1).forEach(line => {
-    ctx.font = `700 ${barSize}px ${FONT_JP}`;
-    const tw = ctx.measureText(line).width;
-    const bw = Math.min(areaW, tw + g.mm(7));
-    ctx.fillStyle = fg;
-    ctx.fillRect(cx - bw / 2, y, bw, barH);
-    ctx.fillStyle = dark ? '#101114' : '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.fillText(line, cx, y + barH / 2 + barSize * 0.36);
-    ctx.textAlign = 'left';
-    y += barH + barGap;
+    ctx.fillText(line, cx, y + subSize);
+    y += subLine;
   });
+  ctx.textAlign = 'left';
 
   drawCoverCopyright(ctx, g, cx, g.oy + g.mm(SHEET_H_MM) - g.mm(12), fg, 'center');
 }
