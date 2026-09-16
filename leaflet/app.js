@@ -631,7 +631,7 @@ const DRIVE_MAX_FOLDERS = 60;
 
 async function listDriveChildren(folderId, mimeClause) {
   const q = encodeURIComponent(`'${folderId}' in parents and ${mimeClause} and trashed = false`);
-  const fields = encodeURIComponent('files(id,name,mimeType),nextPageToken');
+  const fields = encodeURIComponent('files(id,name,mimeType,size,thumbnailLink),nextPageToken');
   let out = [];
   let pageToken = '';
   do {
@@ -705,9 +705,53 @@ function findDriveFileByName(ref) {
          null;
 }
 
-async function fetchDriveImage(fileId) {
-  const res = await googleApiFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+// 入稿用の原寸データは1点で数百MBある（シグルイのA2で352MB）。原寸をそのまま
+// 落とすとダウンロードだけで数分かかり、展開時のメモリでタブごと落ちる。
+// リーフレットに必要なのは長辺でも1100px程度なので、Driveが持っている
+// サムネイルを大きめのサイズで貰って使う。
+const DRIVE_THUMB_EDGE = 2048;
+// サムネイルが無いファイルだけ原寸に取りにいく。その場合の上限。
+const DRIVE_FULL_MAX_BYTES = 40 * 1024 * 1024;
+
+function upsizeThumbnail(link) {
+  // thumbnailLink の末尾は「=s220」「=s220-p-k-no-nu」のようなサイズ＋フラグ指定。
+  // まるごと「=s{大きいサイズ}」に差し替える。フラグを引き継がないのは意図的で、
+  // -p はスマートクロップの指定であり、作品を切ってしまうため。
+  const base = link.replace(/=[swh]\d+[-a-z0-9]*$/i, '');
+  return `${base}=s${DRIVE_THUMB_EDGE}`;
+}
+
+function loadCrossOriginImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';   // キャンバスを汚さない＝書き出しできる
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('サムネイルを読み込めませんでした'));
+    img.src = url;
+  });
+}
+
+async function fetchDriveImage(file) {
+  if (file.thumbnailLink) {
+    try {
+      return await loadCrossOriginImage(upsizeThumbnail(file.thumbnailLink));
+    } catch (err) {
+      console.warn(`${file.name}: サムネイル取得に失敗したので原寸を試します`, err);
+    }
+  }
+  const size = Number(file.size) || 0;
+  if (size > DRIVE_FULL_MAX_BYTES) {
+    throw new Error(`ファイルが大きすぎます（${Math.round(size / 1048576)}MB）。サムネイルも取得できませんでした`);
+  }
+  const res = await googleApiFetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`);
   return loadImageFromBlob(await res.blob());
+}
+
+// シートの画像リンク列がURL直指定だったときは一覧に無いので、メタ情報だけ引く。
+async function fetchDriveFileMeta(fileId) {
+  const fields = encodeURIComponent('id,name,mimeType,size,thumbnailLink');
+  const res = await googleApiFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=${fields}`);
+  return res.json();
 }
 
 async function fetchAllArtImages() {
@@ -718,29 +762,34 @@ async function fetchAllArtImages() {
   }
   let ok = 0;
   let failed = 0;
+  const errors = [];
   for (let i = 0; i < targets.length; i++) {
     const a = targets[i];
     setStatus(els.driveStatus, `作品画像を取得中… (${i + 1}/${targets.length}) ${a.name}`);
+    await new Promise(r => setTimeout(r, 0));   // 進捗表示を描き替えてから次へ
     // シートの画像リンク列がドライブURLならそのファイルを直接、ファイル名だけなら
     // 指定フォルダの一覧から探す。どちらも当たらなければ作品名でも探してみる。
     const fileId = extractDriveFileId(a.imageRef);
-    let target = fileId ? { id: fileId, name: a.imageRef } : findDriveFileByName(a.imageRef);
-    if (!target) target = findDriveFileByName(a.name);
-    if (!target) { a.imgStatus = 'error'; failed++; continue; }
+    let target = fileId ? null : (findDriveFileByName(a.imageRef) || findDriveFileByName(a.name));
     try {
-      a.img = await fetchDriveImage(target.id);
+      if (fileId) target = await fetchDriveFileMeta(fileId);
+      if (!target) { a.imgStatus = 'error'; failed++; continue; }
+      a.img = await fetchDriveImage(target);
       a.imgStatus = 'ok';
       ok++;
     } catch (err) {
       console.error(a.name, err);
       a.imgStatus = 'error';
+      errors.push(`${a.name}（${err.message}）`);
       failed++;
     }
   }
   renderArtList();
   render();
   setStatus(els.driveStatus,
-    `作品画像を${ok}件読み込みました。${failed ? `${failed}件は見つからなかったため、リストのサムネイルをクリックして個別に指定してください。` : ''}`,
+    `作品画像を${ok}件読み込みました。` +
+    (failed ? `${failed}件は取得できませんでした。リストのサムネイルをクリックして個別に指定してください。` +
+      (errors.length ? `　内訳: ${errors.slice(0, 4).join(' / ')}${errors.length > 4 ? ' ほか' : ''}` : '') : ''),
     failed > 0);
 }
 
